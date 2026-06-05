@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackButton, Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
+import { Tag } from '../components/ui/Tag'
 import { Icons } from '../components/ui/icons'
 import { SHOT_SPOTS, SPOT_LABELS, type ShotSpot } from '../types'
 
@@ -11,6 +12,13 @@ const MOCK_PLAYERS = [
   { id: '3', nickname: 'Dre', color: '#22C55E' }, { id: '4', nickname: 'Sef', color: '#EAB308' },
   { id: '5', nickname: 'Tomas', color: '#A855F7' },
 ]
+
+const TAG_VARIANT: Record<typeof GAME_TYPES[number], 'banks' | 'drill' | 'match' | 'generic'> = {
+  Banks: 'banks',
+  Middies: 'drill',
+  Next: 'match',
+  Generic: 'generic',
+}
 
 export default function CompetitiveSetupPage() {
   const nav = useNavigate()
@@ -29,8 +37,18 @@ export default function CompetitiveSetupPage() {
   return (
     <div className="min-h-dvh px-[18px] pt-[54px] pb-28">
       <BackButton onClick={() => nav('/')}>Session</BackButton>
-      <div className="flex items-center justify-between mt-4 mb-4">
-        <span className="font-display text-[22px] uppercase tracking-[.02em]">New Activity</span>
+
+      {/* Hero gradient header */}
+      <div style={{
+        background: 'var(--hero-gradient)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 'var(--r-lg)',
+        padding: '16px 18px',
+        marginBottom: 20,
+        marginTop: 16,
+      }}>
+        <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>New Activity</p>
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Competitive Game</div>
       </div>
 
       {/* Type selector */}
@@ -40,14 +58,14 @@ export default function CompetitiveSetupPage() {
           <button
             key={t}
             onClick={() => setGameType(t)}
-            className="flex justify-center items-center py-[13px] rounded-full text-[13px] font-bold border cursor-pointer transition-all"
+            className="flex flex-col justify-center items-center gap-1.5 py-[13px] cursor-pointer transition-all"
             style={{
-              background: gameType === t ? 'var(--orange)' : 'var(--panel-2)',
-              color: gameType === t ? '#0c0c0c' : 'var(--dim)',
-              borderColor: gameType === t ? 'var(--orange)' : 'var(--line)',
+              borderRadius: 'var(--r-md)',
+              background: gameType === t ? 'rgba(255,90,31,0.1)' : 'var(--panel)',
+              border: gameType === t ? '2px solid var(--orange)' : '1px solid var(--line)',
             }}
           >
-            {t}
+            <Tag variant={TAG_VARIANT[t]}>{t}</Tag>
           </button>
         ))}
       </div>
@@ -61,8 +79,9 @@ export default function CompetitiveSetupPage() {
               <button
                 key={s}
                 onClick={() => setSpot(s)}
-                className="flex justify-center items-center py-[11px] rounded-full text-[11px] font-bold border cursor-pointer transition-all"
+                className="flex justify-center items-center py-[11px] text-[11px] font-bold border cursor-pointer transition-all"
                 style={{
+                  borderRadius: 'var(--r-pill)',
                   background: spot === s ? 'var(--orange)' : 'var(--panel-2)',
                   color: spot === s ? '#0c0c0c' : 'var(--dim)',
                   borderColor: spot === s ? 'var(--orange)' : 'var(--line)',
@@ -82,8 +101,9 @@ export default function CompetitiveSetupPage() {
           <button
             key={p.id}
             onClick={() => togglePlayer(p.id)}
-            className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 border cursor-pointer transition-all"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 border cursor-pointer transition-all"
             style={{
+              borderRadius: 'var(--r-pill)',
               background: selectedPlayers.has(p.id) ? 'var(--orange-soft)' : 'var(--panel-2)',
               borderColor: selectedPlayers.has(p.id) ? 'var(--orange)' : 'var(--line)',
             }}
