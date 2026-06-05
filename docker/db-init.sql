@@ -20,8 +20,3 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO anon;
-
--- v5.4 additions (mirroring 002_v54_additions.sql)
-ALTER TABLE drills       ADD COLUMN IF NOT EXISTS hand text NOT NULL DEFAULT 'right';
-ALTER TABLE heat_entries ADD COLUMN IF NOT EXISTS hand text NOT NULL DEFAULT 'right';
-ALTER TABLE sessions     ADD COLUMN IF NOT EXISTS notes text;
