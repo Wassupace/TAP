@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { BackButton } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { Icons } from '../components/ui/icons'
 import { ShotChart } from '../components/ui/ShotChart'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { useAttendanceStats } from '../hooks/useAttendanceStats'
-import type { ChartMode } from '../types'
+import { supabase } from '../lib/supabase'
+import type { ChartMode, HeatEntry } from '../types'
 
 const MOCK = { id: '1', nickname: 'JC', name: 'Jordan C.', color: '#FF5A1F', w: 47, l: 23, ft: 82, ftGoal: 75, mid: 61, midGoal: 50, tpt: 38, tptGoal: 40 }
 
@@ -15,6 +17,19 @@ export default function PlayerProfilePage() {
   const { id: playerId = '' } = useParams()
   const [chartMode, setChartMode] = useState<ChartMode | null>(null)
   const { data: attStats } = useAttendanceStats(playerId)
+
+  const { data: heatEntries = [] } = useQuery<HeatEntry[]>({
+    queryKey: ['heat-entries', playerId],
+    enabled: !!playerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('heat_entries')
+        .select('*')
+        .eq('player_id', playerId)
+      if (error) throw error
+      return data as HeatEntry[]
+    },
+  })
 
   const ftPct = MOCK.ft / 100
   const midPct = MOCK.mid / 100
@@ -139,6 +154,7 @@ export default function PlayerProfilePage() {
           onModeChange={setChartMode}
           onClose={() => setChartMode(null)}
           playerName={MOCK.nickname}
+          heatEntries={heatEntries}
         />
       )}
     </>

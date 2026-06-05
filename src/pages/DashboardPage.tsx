@@ -184,7 +184,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
         </div>
 
         {/* Action Hub — two large blocky buttons */}
-        <div className="stagger" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+        <div className="stagger" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
           {/* New Match — primary orange */}
           <button
             onClick={() => nav('/match/setup')}
@@ -214,6 +214,28 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           >
             <span style={{ width: 24, height: 24, display: 'flex' }}>{Icons.target}</span>
             <span>New Activity</span>
+          </button>
+        </div>
+
+        {/* Shooting Drill — full-width secondary button */}
+        <div className="stagger" style={{ marginBottom: 20 }}>
+          <button
+            type="button"
+            onClick={() => nav('/drill')}
+            style={{
+              width: '100%', minHeight: 50,
+              borderRadius: 'var(--r-md)',
+              display: 'flex', flexDirection: 'row',
+              alignItems: 'center', justifyContent: 'center', gap: 8,
+              border: '1px solid var(--line-2)',
+              cursor: 'pointer',
+              fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
+              fontSize: 14, letterSpacing: '0.02em', textTransform: 'uppercase' as const,
+              color: 'var(--chalk)', background: 'var(--panel-2)',
+            }}
+          >
+            <span style={{ width: 18, height: 18, display: 'flex' }}>{Icons.target}</span>
+            Shooting Drill
           </button>
         </div>
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ShotType, ShotSpot, Player, Hand } from '../types'
+import { dbInsert } from '../lib/db'
 
 interface HeatRecord {
   playerId: string
@@ -11,6 +12,7 @@ interface HeatRecord {
 }
 
 interface DrillStore {
+  drillId: string | null
   shotType: ShotType
   hand: Hand
   selectedSpots: ShotSpot[]
@@ -22,6 +24,7 @@ interface DrillStore {
   currentMakes: number
   completedHeats: HeatRecord[]
 
+  setDrillId:     (id: string) => void
   setShotType:    (t: ShotType) => void
   setHand:        (h: Hand) => void
   toggleSpot:     (s: ShotSpot) => void
@@ -35,6 +38,7 @@ interface DrillStore {
 }
 
 export const useDrillStore = create<DrillStore>((set, get) => ({
+  drillId:            null,
   shotType:           'threePoint',
   hand:               'right',
   selectedSpots:      ['center'],
@@ -46,6 +50,7 @@ export const useDrillStore = create<DrillStore>((set, get) => ({
   currentMakes:       0,
   completedHeats:     [],
 
+  setDrillId:     (id) => set({ drillId: id }),
   setShotType:    (t) => set({ shotType: t }),
   setHand:        (h) => set({ hand: h }),
   toggleSpot:     (s) => set(state => ({
@@ -99,6 +104,19 @@ export const useDrillStore = create<DrillStore>((set, get) => ({
       currentPlayerIndex: nextPlayerIndex,
     })
 
+    const { drillId } = get()
+    if (drillId) {
+      dbInsert('heat_entries', {
+        drill_id:    drillId,
+        player_id:   heat.playerId,
+        hand:        heat.hand,
+        spot:        heat.spot ?? null,
+        makes:       heat.makes,
+        attempts:    heat.attempts,
+        heat_number: heat.heatNumber,
+      }).catch(() => {})
+    }
+
     return { spotComplete, drillComplete }
   },
 
@@ -118,6 +136,7 @@ export const useDrillStore = create<DrillStore>((set, get) => ({
   },
 
   reset: () => set({
+    drillId: null,
     shotType: 'threePoint', hand: 'right', selectedSpots: ['center'],
     heatSize: 10, makesTargetPerSpot: 10, players: [],
     currentSpotIndex: 0, currentPlayerIndex: 0, currentMakes: 0, completedHeats: [],

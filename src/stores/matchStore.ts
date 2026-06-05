@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { MatchFormat, ScoringStyle, Player } from '../types'
 import { FORMAT_TEAM_SIZE, FORMAT_DEFAULT_TARGET } from '../types'
+import { dbInsert } from '../lib/db'
 
 interface CompletedGame {
   gameNumber: number
@@ -12,6 +13,7 @@ interface CompletedGame {
 }
 
 interface MatchStore {
+  matchId: string | null
   format: MatchFormat
   targetScore: number
   scoringStyle: ScoringStyle
@@ -25,6 +27,7 @@ interface MatchStore {
   timerSeconds: number
   completedGames: CompletedGame[]
 
+  setMatchId: (id: string) => void
   setFormat: (f: MatchFormat) => void
   setTargetScore: (n: number) => void
   setScoringStyle: (s: ScoringStyle) => void
@@ -40,6 +43,7 @@ interface MatchStore {
 }
 
 export const useMatchStore = create<MatchStore>((set, get) => ({
+  matchId: null,
   format: '3v3',
   targetScore: 11,
   scoringStyle: 'targetScore',
@@ -53,6 +57,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   timerSeconds: 0,
   completedGames: [],
 
+  setMatchId: (id) => set({ matchId: id }),
   setFormat: (f) => set({ format: f, targetScore: FORMAT_DEFAULT_TARGET[f] }),
   setTargetScore: (n) => set({ targetScore: n }),
   setScoringStyle: (s) => set({ scoringStyle: s }),
@@ -118,6 +123,20 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
       isTimerRunning: false,
       timerSeconds: 0,
     }))
+
+    const { matchId } = get()
+    if (matchId) {
+      dbInsert('games', {
+        match_id:          matchId,
+        game_number:       game.gameNumber,
+        team_a_score:      game.teamAScore,
+        team_b_score:      game.teamBScore,
+        duration_seconds:  game.durationSeconds,
+        team_a_player_ids: game.teamAPlayerIds,
+        team_b_player_ids: game.teamBPlayerIds,
+      }).catch(() => {})
+    }
+
     return game
   },
 
@@ -128,6 +147,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   },
 
   reset: () => set({
+    matchId: null,
     teamA: [], teamB: [], subQueue: [],
     currentAScore: 0, currentBScore: 0,
     gameTimerStart: null, isTimerRunning: false, timerSeconds: 0,
