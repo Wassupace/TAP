@@ -50,7 +50,7 @@ export default function DrillRecapPage() {
       logActivity.mutate({
         session_id: activeSessionId,
         activity_type: 'drill',
-        reference_id: drillId ?? undefined,
+        reference_id: drillId ?? '',
         feed_summary: `${shotType} · ${selectedSpots.length} spot${selectedSpots.length !== 1 ? 's' : ''} · ${totalAttempts} att · ${totalPct}%`,
       })
     }
