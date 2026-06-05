@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
 import { Icons } from '../components/ui/icons'
 import { useSessionStore } from '../stores/sessionStore'
 
@@ -17,22 +18,36 @@ export default function SessionRecapPage() {
   return (
     <div className="min-h-dvh flex flex-col">
       <div className="flex-1 overflow-y-auto no-scrollbar px-[18px] pt-[54px] pb-24 stagger">
-        <div className="text-center mt-2 mb-5">
-          <div className="font-display text-[14px] tracking-[.1em] mb-1.5" style={{ color: 'var(--orange-2)' }}>SESSION COMPLETE</div>
-          <div className="font-display text-[30px] uppercase">2h 15m · Levallois</div>
-          <p className="text-[var(--dim)] text-[13px] mt-1">Sat 13 June · the daily story</p>
-        </div>
+
+        {/* Hero summary card */}
+        <Card variant="hero" style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 6px' }}>
+            Session Complete
+          </p>
+          <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 28, letterSpacing: '-0.02em' }}>
+            2h 15min
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--dim)', margin: '4px 0 0' }}>
+            Levallois · Sat 13 June · the daily story
+          </p>
+        </Card>
 
         {CALLOUTS.map(c => (
-          <div key={c.label} className="flex gap-3 p-[15px] rounded-[18px] mb-2.5" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
-            <div className="w-[42px] h-[42px] rounded-[12px] grid place-items-center flex-none" style={{ background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
-              <span className="w-[21px] h-[21px]">{c.icon}</span>
+          <Card key={c.label} variant="accent" style={{ marginBottom: 8 }}>
+            <div className="flex gap-3">
+              <div className="w-[42px] h-[42px] grid place-items-center flex-none" style={{ borderRadius: 'var(--r-sm)', background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
+                <span className="w-[21px] h-[21px]">{c.icon}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 4 }}>
+                  {c.label}
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--chalk)', lineHeight: 1.35 }}>
+                  {c.value}
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-[11px] tracking-[.12em] uppercase font-bold mb-1" style={{ color: 'var(--orange-2)' }}>{c.label}</div>
-              <div className="text-[15px] font-semibold leading-[1.35]">{c.value}</div>
-            </div>
-          </div>
+          </Card>
         ))}
       </div>
 
