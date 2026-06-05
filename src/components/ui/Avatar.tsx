@@ -1,52 +1,34 @@
+import type { CSSProperties } from 'react'
+
 interface AvatarProps {
   nickname: string
   color?: string
-  size?: 'sm' | 'lg'
-  photoUrl?: string
+  variant?: 'default' | 'active' | 'team-a' | 'team-b'
+  size?: number
 }
 
-const COLORS = ['#FF5A1F','#3B82F6','#22C55E','#EAB308','#A855F7','#EF4444','#06B6D4','#F97316','#EC4899','#14B8A6']
+export function Avatar({ nickname, color, variant = 'default', size = 38 }: AvatarProps) {
+  const initials = nickname.slice(0, 2).toUpperCase()
 
-export function avatarColor(nickname: string): string {
-  let hash = 0
-  for (let i = 0; i < nickname.length; i++) hash = nickname.charCodeAt(i) + ((hash << 5) - hash)
-  return COLORS[Math.abs(hash) % COLORS.length]
-}
-
-export function Avatar({ nickname, color, size = 'sm', photoUrl }: AvatarProps) {
-  const bg = color ?? avatarColor(nickname)
-  const dim = size === 'lg' ? 62 : 38
-  const fontSize = size === 'lg' ? 22 : 14
-
-  if (photoUrl) {
-    return (
-      <img
-        src={photoUrl}
-        alt={nickname}
-        style={{ width: dim, height: dim, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-      />
-    )
+  const styles: Record<string, CSSProperties> = {
+    default:  { background: 'var(--panel-2)', color: 'var(--dim)' },
+    active:   { background: color ?? 'var(--orange)', color: '#fff' },
+    'team-a': { background: 'rgba(59,130,246,0.2)', color: '#60A5FA', border: '1.5px solid rgba(59,130,246,0.4)' },
+    'team-b': { background: 'rgba(239,68,68,0.2)',  color: '#F87171', border: '1.5px solid rgba(239,68,68,0.4)' },
   }
 
   return (
     <div
       style={{
-        width: dim,
-        height: dim,
-        minWidth: dim,
+        width: size, height: size, minWidth: size,
         borderRadius: '50%',
-        background: bg,
-        display: 'grid',
-        placeItems: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: Math.round(size * 0.32), fontWeight: 800,
         flexShrink: 0,
-        fontSize,
-        fontFamily: 'Anton, sans-serif',
-        fontWeight: 400,
-        color: '#0c0c0c',
-        letterSpacing: '.02em',
+        ...styles[variant],
       }}
     >
-      {nickname.slice(0, 2).toUpperCase()}
+      {initials}
     </div>
   )
 }

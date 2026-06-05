@@ -37,7 +37,7 @@ export default function PlayerProfilePage() {
         {/* Profile card */}
         <div className="rounded-[18px] p-4 mt-4 mb-4 stagger" style={{ background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
           <div className="flex gap-3.5 items-center">
-            <Avatar nickname={MOCK.nickname} color={MOCK.color} size="lg" />
+            <Avatar nickname={MOCK.nickname} color={MOCK.color} variant="active" size={62} />
             <div className="flex-1">
               <div className="font-heading text-[20px]">
                 {MOCK.name.split(' ')[0]} <span style={{ color: 'var(--dim)' }}>/ {MOCK.nickname}</span>
