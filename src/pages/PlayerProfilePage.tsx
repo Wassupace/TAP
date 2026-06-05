@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { BackButton } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { Icons } from '../components/ui/icons'
 import { ShotChart } from '../components/ui/ShotChart'
+import { useAttendanceStats } from '../hooks/useAttendanceStats'
 import type { ChartMode } from '../types'
 
 const MOCK = { id: '1', nickname: 'JC', name: 'Jordan C.', color: '#FF5A1F', w: 47, l: 23, ft: 82, ftGoal: 75, mid: 61, midGoal: 50, tpt: 38, tptGoal: 40 }
@@ -27,7 +28,9 @@ function StatBar({ label, value, goal, onClick }: { label: string; value: number
 
 export default function PlayerProfilePage() {
   const nav = useNavigate()
+  const { id: playerId = '' } = useParams()
   const [chartMode, setChartMode] = useState<ChartMode | null>(null)
+  const { data: attStats } = useAttendanceStats(playerId)
 
   return (
     <>
@@ -65,11 +68,44 @@ export default function PlayerProfilePage() {
           <StatBar label="3PT%" value={MOCK.tpt} goal={MOCK.tptGoal} onClick={() => setChartMode('three')} />
         </div>
 
-        {/* Last seen */}
-        <div className="flex items-center gap-2.5 rounded-[18px] p-4 mt-2" style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--dim)', fontSize: 13 }}>
-          <span className="w-4 h-4">{Icons.clock}</span>
-          <span>Last seen — Sat 31 May · Levallois Gym</span>
-        </div>
+        {/* Attendance stats strip */}
+        {attStats && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            background: 'var(--panel-2)', borderRadius: 'var(--r-sm)',
+            padding: '12px 14px', marginTop: 10,
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 20, color: 'var(--chalk)' }}>
+                {attStats.totalSessions}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginTop: 2 }}>
+                Sessions
+              </div>
+            </div>
+            <div style={{ width: 1, background: 'var(--panel-3)', height: 36 }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 20, color: 'var(--chalk)' }}>
+                {attStats.streak > 0 ? '🔥' : ''}{attStats.streak}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginTop: 2 }}>
+                Streak
+              </div>
+            </div>
+            <div style={{ width: 1, background: 'var(--panel-3)', height: 36 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+                Last seen
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 3 }}>
+                {attStats.lastSeen
+                  ? new Date(attStats.lastSeen).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+                  : '—'}
+                {attStats.lastLocation ? ` · ${attStats.lastLocation}` : ''}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Shot chart overlay */}
