@@ -6,6 +6,8 @@ export type ShotSpot = 'left0' | 'left45' | 'center' | 'right45' | 'right0'
 export type CompetitiveGameType = 'banks' | 'middies' | 'next' | 'generic'
 export type ActivityType = 'match' | 'drill' | 'competitiveGame'
 export type ChartMode = 'ft' | 'mid' | 'three'
+export type Hand = 'left' | 'right'
+export type SyncStatus = 'online' | 'offline' | 'syncing'
 
 export const SHOT_SPOTS: ShotSpot[] = ['left0', 'left45', 'center', 'right45', 'right0']
 export const SPOT_LABELS: Record<ShotSpot, string> = {
@@ -19,12 +21,12 @@ export const FORMAT_DEFAULT_TARGET: Record<MatchFormat, number> = {
 }
 export const ALL_FORMATS: MatchFormat[] = ['1v1', '2v2', '3v3', '4v4', '5v5']
 export const ALL_SHOT_TYPES: { type: ShotType; label: string }[] = [
-  { type: 'freeThrow', label: 'Free Throw' },
-  { type: 'midRange', label: 'Mid-Range' },
+  { type: 'freeThrow',  label: 'Free Throw' },
+  { type: 'midRange',   label: 'Mid-Range' },
   { type: 'threePoint', label: 'Three-Point' },
-  { type: 'layup', label: 'Layup' },
-  { type: 'floater', label: 'Floater' },
-  { type: 'postUp', label: 'Post-Up' },
+  { type: 'layup',      label: 'Layup' },
+  { type: 'floater',    label: 'Floater' },
+  { type: 'postUp',     label: 'Post-Up' },
 ]
 
 export interface Player {
@@ -48,6 +50,7 @@ export interface Session {
   is_recurring: boolean
   recurrence_weekday?: number
   expected_player_ids: string[]
+  notes?: string
 }
 
 export interface SessionAttendance {
@@ -98,6 +101,7 @@ export interface Drill {
   id: string
   session_id: string
   shot_type: ShotType
+  hand: Hand
   selected_spots: ShotSpot[]
   heat_size: number
   makes_target_per_spot?: number
@@ -110,6 +114,7 @@ export interface HeatEntry {
   id: string
   drill_id: string
   player_id: string
+  hand: Hand
   spot?: ShotSpot
   makes: number
   attempts: number
@@ -143,4 +148,11 @@ export interface RecapCallout {
   icon: 'trophy' | 'flame' | 'clock' | 'ball' | 'target' | 'bolt'
   label: string
   value: string
+}
+
+export interface AttendanceStats {
+  totalSessions: number
+  streak: number
+  lastSeen: string | null
+  lastLocation: string | null
 }
