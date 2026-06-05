@@ -44,8 +44,13 @@ export default function AttendancePage() {
           <button
             key={p.id}
             onClick={() => toggle(p.id)}
-            className="w-full flex gap-3 items-center p-[13px_14px] rounded-[12px] cursor-pointer transition-all text-left"
-            style={{ background: 'var(--panel-2)', border: '1px solid var(--line)' }}
+            className="w-full flex gap-3 items-center p-[13px_14px] cursor-pointer transition-all text-left"
+            style={{
+              background: 'var(--panel-2)',
+              border: '1px solid var(--line)',
+              borderLeft: checked.has(p.id) ? '3px solid var(--green)' : '1px solid var(--line)',
+              borderRadius: 'var(--r-sm)',
+            }}
           >
             <Avatar nickname={p.nickname} color={p.color} />
             <div className="flex-1">
@@ -64,7 +69,7 @@ export default function AttendancePage() {
           </button>
         ))}
 
-        <button className="w-full flex gap-3 items-center p-[13px_14px] rounded-[12px] cursor-pointer" style={{ background: 'var(--panel)', border: '1px dashed var(--line-2)' }}>
+        <button className="w-full flex gap-3 items-center p-[13px_14px] cursor-pointer" style={{ background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 'var(--r-sm)' }}>
           <span className="w-5 h-5 text-[var(--faint)]">{Icons.plus}</span>
           <span className="text-[14px] text-[var(--dim)]">Add walk-in</span>
         </button>

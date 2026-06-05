@@ -20,6 +20,20 @@ export default function CalendarPage() {
     <div className="min-h-dvh px-[18px] pt-[54px] pb-8">
       <BackButton onClick={() => nav('/')}>Dashboard</BackButton>
 
+      <div style={{
+        background: 'var(--hero-gradient)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 'var(--r-lg)',
+        padding: '16px 18px', marginBottom: 20,
+      }}>
+        <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>
+          Sessions
+        </p>
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>
+          Calendar
+        </div>
+      </div>
+
       <div className="flex items-center justify-between mt-4 mb-4">
         <span className="font-display text-[22px] uppercase tracking-[.02em]">June 2026</span>
         <button className="w-[42px] h-[42px] rounded-[14px] grid place-items-center bg-[var(--panel)] border border-[var(--line)] text-chalk cursor-pointer hover:bg-[var(--panel-2)] transition-colors">
@@ -54,7 +68,7 @@ export default function CalendarPage() {
         <div className="stagger">
           <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-3">Sat 13 June · 2 sessions</p>
 
-          <div className="rounded-[18px] p-4 mb-2.5 flex items-center gap-3" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
+          <div className="p-4 mb-2.5 flex items-center gap-3" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)' }}>
             <div className="w-[38px] h-[38px] rounded-[11px] grid place-items-center flex-none" style={{ background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
               <span className="w-5 h-5">{Icons.clock}</span>
             </div>
@@ -64,7 +78,7 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <div className="rounded-[18px] p-4 mb-4 flex items-center gap-3" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
+          <div className="p-4 mb-4 flex items-center gap-3" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)' }}>
             <div className="w-[38px] h-[38px] rounded-[11px] grid place-items-center flex-none" style={{ background: 'var(--blue-soft)', color: 'var(--blue)' }}>
               <span className="w-5 h-5">{Icons.clock}</span>
             </div>
