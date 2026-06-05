@@ -2,7 +2,7 @@
 -- TAP — Talking About Practice · Initial Schema
 -- ============================================================
 
-CREATE TABLE players (
+CREATE TABLE IF NOT EXISTS players (
   id             uuid primary key default gen_random_uuid(),
   name           text not null,
   nickname       text not null,
@@ -13,7 +13,7 @@ CREATE TABLE players (
   created_at     timestamptz default now()
 );
 
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
   id                  uuid primary key default gen_random_uuid(),
   date                date not null,
   location            text not null,
@@ -25,7 +25,7 @@ CREATE TABLE sessions (
   expected_player_ids uuid[] default '{}'
 );
 
-CREATE TABLE session_attendances (
+CREATE TABLE IF NOT EXISTS session_attendances (
   id          uuid primary key default gen_random_uuid(),
   session_id  uuid references sessions(id) on delete cascade,
   player_id   uuid references players(id) on delete cascade,
@@ -34,7 +34,7 @@ CREATE TABLE session_attendances (
   departed_at timestamptz
 );
 
-CREATE TABLE activity_records (
+CREATE TABLE IF NOT EXISTS activity_records (
   id            uuid primary key default gen_random_uuid(),
   session_id    uuid references sessions(id) on delete cascade,
   activity_type text not null,
@@ -43,7 +43,7 @@ CREATE TABLE activity_records (
   feed_summary  text
 );
 
-CREATE TABLE matches (
+CREATE TABLE IF NOT EXISTS matches (
   id                   uuid primary key default gen_random_uuid(),
   session_id           uuid references sessions(id) on delete cascade,
   format               text not null,
@@ -56,7 +56,7 @@ CREATE TABLE matches (
   sub_queue_player_ids uuid[] default '{}'
 );
 
-CREATE TABLE games (
+CREATE TABLE IF NOT EXISTS games (
   id                uuid primary key default gen_random_uuid(),
   match_id          uuid references matches(id) on delete cascade,
   game_number       int not null,
@@ -69,7 +69,7 @@ CREATE TABLE games (
   team_b_player_ids uuid[] default '{}'
 );
 
-CREATE TABLE drills (
+CREATE TABLE IF NOT EXISTS drills (
   id                    uuid primary key default gen_random_uuid(),
   session_id            uuid references sessions(id) on delete cascade,
   shot_type             text not null,
@@ -81,7 +81,7 @@ CREATE TABLE drills (
   ended_at              timestamptz
 );
 
-CREATE TABLE heat_entries (
+CREATE TABLE IF NOT EXISTS heat_entries (
   id          uuid primary key default gen_random_uuid(),
   drill_id    uuid references drills(id) on delete cascade,
   player_id   uuid references players(id) on delete cascade,
@@ -92,7 +92,7 @@ CREATE TABLE heat_entries (
   recorded_at timestamptz default now()
 );
 
-CREATE TABLE competitive_games (
+CREATE TABLE IF NOT EXISTS competitive_games (
   id              uuid primary key default gen_random_uuid(),
   session_id      uuid references sessions(id) on delete cascade,
   game_type       text not null,
@@ -104,7 +104,7 @@ CREATE TABLE competitive_games (
   ended_at        timestamptz
 );
 
-CREATE TABLE competitive_results (
+CREATE TABLE IF NOT EXISTS competitive_results (
   id        uuid primary key default gen_random_uuid(),
   game_id   uuid references competitive_games(id) on delete cascade,
   player_id uuid references players(id) on delete cascade,
@@ -121,11 +121,17 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon;
 
 -- Hand tracking for drills
 ALTER TABLE drills ADD COLUMN IF NOT EXISTS hand text NOT NULL DEFAULT 'right';
-ALTER TABLE drills ADD CONSTRAINT drills_hand_valid CHECK (hand IN ('left', 'right'));
+DO $$ BEGIN
+  ALTER TABLE drills ADD CONSTRAINT drills_hand_valid CHECK (hand IN ('left', 'right'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Hand tracking for heat entries
 ALTER TABLE heat_entries ADD COLUMN IF NOT EXISTS hand text NOT NULL DEFAULT 'right';
-ALTER TABLE heat_entries ADD CONSTRAINT heat_entries_hand_valid CHECK (hand IN ('left', 'right'));
+DO $$ BEGIN
+  ALTER TABLE heat_entries ADD CONSTRAINT heat_entries_hand_valid CHECK (hand IN ('left', 'right'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Free-text session notes
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS notes text;
