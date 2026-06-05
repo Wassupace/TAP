@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { IOSInstallBanner } from './components/ui/IOSInstallBanner'
 import DashboardPage from './pages/DashboardPage'
 import CalendarPage from './pages/CalendarPage'
 import AttendancePage from './pages/AttendancePage'
@@ -19,6 +20,7 @@ import SheetsExportPage from './pages/SheetsExportPage'
 export default function App() {
   return (
     <div className="relative z-10 min-h-dvh">
+      <IOSInstallBanner />
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
