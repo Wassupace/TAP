@@ -35,6 +35,7 @@ interface MatchStore {
   stopTimer: () => number
   tickTimer: () => void
   endGame: () => CompletedGame
+  undoLastGame: () => void
   reset: () => void
 }
 
@@ -118,6 +119,12 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
       timerSeconds: 0,
     }))
     return game
+  },
+
+  undoLastGame: () => {
+    const { completedGames } = get()
+    if (completedGames.length === 0) return
+    set({ completedGames: completedGames.slice(0, -1) })
   },
 
   reset: () => set({
