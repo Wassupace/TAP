@@ -70,7 +70,17 @@ export default function DashboardPage() {
   return <ActiveDashboard location={activeLocation} elapsed={elapsedSeconds} />
 }
 
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} width={20} height={20}>
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  )
+}
+
 function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void; onCalendar: () => void; onPlayers: () => void }) {
+  const nav = useNavigate()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', padding: '54px 18px 0' }}>
       {/* Top bar */}
@@ -79,9 +89,14 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void
           <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.roster}</span>
         </button>
         <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 18, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.02em' }}>TAP</span>
-        <button onClick={onCalendar} style={S.iconBtn}>
-          <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.calendar}</span>
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onCalendar} style={S.iconBtn}>
+            <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.calendar}</span>
+          </button>
+          <button type="button" onClick={() => nav('/settings')} style={S.iconBtn}>
+            <GearIcon />
+          </button>
+        </div>
       </div>
 
       {/* Centre */}
@@ -133,9 +148,14 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           <button onClick={() => nav('/players')} style={S.iconBtn}>
             <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.roster}</span>
           </button>
-          <button onClick={() => nav('/calendar')} style={S.iconBtn}>
-            <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.calendar}</span>
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => nav('/calendar')} style={S.iconBtn}>
+              <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.calendar}</span>
+            </button>
+            <button type="button" onClick={() => nav('/settings')} style={S.iconBtn}>
+              <GearIcon />
+            </button>
+          </div>
         </div>
 
         {/* Session header card */}

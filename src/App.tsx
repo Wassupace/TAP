@@ -13,6 +13,8 @@ import BanksPage from './pages/BanksPage'
 import DrillPage from './pages/DrillPage'
 import DrillRecapPage from './pages/DrillRecapPage'
 import SessionRecapPage from './pages/SessionRecapPage'
+import SettingsPage     from './pages/SettingsPage'
+import SheetsExportPage from './pages/SheetsExportPage'
 
 export default function App() {
   return (
@@ -32,6 +34,8 @@ export default function App() {
         <Route path="/drill" element={<DrillPage />} />
         <Route path="/drill/recap" element={<DrillRecapPage />} />
         <Route path="/session-recap/:id" element={<SessionRecapPage />} />
+        <Route path="/settings"        element={<SettingsPage />} />
+        <Route path="/settings/sheets" element={<SheetsExportPage />} />
       </Routes>
     </div>
   )
