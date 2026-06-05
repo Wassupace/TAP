@@ -1,4 +1,6 @@
-import type { ChartMode } from '../../types'
+import { useState } from 'react'
+import type { ChartMode, HeatEntry } from '../../types'
+import { HandToggle } from './HandToggle'
 
 /* ---- Court geometry constants (all in SVG units, viewBox 0 0 500 460) ---- */
 const CX = 250, CY = 392
@@ -147,9 +149,43 @@ interface ShotChartProps {
   onModeChange: (m: ChartMode) => void
   onClose: () => void
   playerName?: string
+  heatEntries?: HeatEntry[]    // if provided, enables L/R/ALL hand filtering
 }
 
-export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player' }: ShotChartProps) {
+export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', heatEntries }: ShotChartProps) {
+  const [handMode, setHandMode] = useState<'all' | 'left' | 'right'>('all')
+
+  // Build per-zone stat overrides when heatEntries are provided
+  const zoneStats: Record<string, { makes: number; attempts: number }> = {}
+  if (heatEntries && heatEntries.length > 0) {
+    const filtered = handMode === 'all'
+      ? heatEntries
+      : heatEntries.filter(h => h.hand === handMode)
+
+    // Map spot → zone ids (each spot covers one mid and one three zone)
+    const spotZoneMap: Record<string, string[]> = {
+      left0:   ['mr0l', 't0l'],
+      left45:  ['mr45l', 't45l'],
+      center:  ['mrtop', 'ttop'],
+      right45: ['mr45r', 't45r'],
+      right0:  ['mr0r', 't0r'],
+    }
+
+    filtered.forEach(h => {
+      if (!h.spot) return
+      const zids = spotZoneMap[h.spot] ?? []
+      zids.forEach(zid => {
+        if (!zoneStats[zid]) zoneStats[zid] = { makes: 0, attempts: 0 }
+        zoneStats[zid].makes    += h.makes
+        zoneStats[zid].attempts += h.attempts
+      })
+    })
+  }
+
+  function getZoneData(z: { id: string; makes: number; attempts: number }) {
+    return zoneStats[z.id] ?? { makes: z.makes, attempts: z.attempts }
+  }
+
   const ftOn = mode === 'ft'
   const ftColor = ftOn ? zoneColor(41, 50, 'ft') : 'rgba(156,163,175,0.18)'
 
@@ -191,6 +227,13 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player' }
         ))}
       </div>
 
+      {/* Hand toggle — only shown when heatEntries provided */}
+      {heatEntries && heatEntries.length > 0 && (
+        <div className="px-4 mb-3">
+          <HandToggle value={handMode} onChange={setHandMode} showAll={true} />
+        </div>
+      )}
+
       {/* Chart */}
       <div className="mx-4 rounded-[18px] p-2" style={{ background: 'linear-gradient(180deg,#10202c,#0a141c)', border: '1px solid var(--line)' }}>
         <svg viewBox="0 0 500 460" width="100%" xmlns="http://www.w3.org/2000/svg">
@@ -204,7 +247,8 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player' }
           <g clipPath="url(#courtClip)">
             {ZONES.map(z => {
               const active = isActive(z, mode)
-              const fill = active ? zoneColor(z.makes, z.attempts, z.type) : 'rgba(156,163,175,0.18)'
+              const { makes, attempts } = getZoneData(z)
+              const fill = active ? zoneColor(makes, attempts, z.type) : 'rgba(156,163,175,0.18)'
               return (
                 <path key={z.id} d={z.d} fill={fill} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
               )
@@ -217,8 +261,9 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player' }
           {/* Zone labels — on top of everything */}
           {ZONES.map(z => {
             const active = isActive(z, mode)
-            const label = active ? `${z.makes}/${z.attempts}` : '—'
-            const pct = active && z.attempts > 0 ? `${Math.round((z.makes / z.attempts) * 100)}%` : '—'
+            const { makes, attempts } = getZoneData(z)
+            const label = active ? `${makes}/${attempts}` : '—'
+            const pct = active && attempts > 0 ? `${Math.round((makes / attempts) * 100)}%` : '—'
             const chipFill = active ? 'rgba(255,255,255,.82)' : 'rgba(20,27,38,.6)'
             const textCol = active ? '#0c0c0c' : 'rgba(244,246,252,.45)'
             return (
