@@ -38,21 +38,21 @@ export default function MatchActivePage() {
         {/* Score panels */}
         <div className="flex gap-2.5 mb-3.5">
           {/* Team A */}
-          <div className="flex-1 rounded-[20px] p-3.5 text-center" style={{ background: 'var(--blue-soft)', border: '1px solid rgba(59,130,246,.33)' }}>
+          <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,.33)', borderRadius: 'var(--r-lg)' }}>
             <div className="text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--blue)' }}>Team A</div>
             <div className="font-display text-[62px] leading-none mb-1.5 text-chalk" id="scoreA">{currentAScore}</div>
             <div className="flex gap-1.5">
-              <button onClick={() => incrementScore('A', 1)} className="flex-1 border-0 font-bold py-[11px] rounded-[11px] cursor-pointer text-[15px] text-white" style={{ background: 'var(--blue)' }}>+1</button>
-              <button onClick={() => incrementScore('A', 2)} className="flex-1 border-0 font-bold py-[11px] rounded-[11px] cursor-pointer text-[15px] text-chalk" style={{ background: 'rgba(255,255,255,.1)' }}>+2</button>
+              <button onClick={() => incrementScore('A', 1)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-white" style={{ background: 'var(--blue)', borderRadius: 'var(--r-sm)' }}>+1</button>
+              <button onClick={() => incrementScore('A', 2)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-chalk" style={{ background: 'rgba(255,255,255,.1)', borderRadius: 'var(--r-sm)' }}>+2</button>
             </div>
           </div>
           {/* Team B */}
-          <div className="flex-1 rounded-[20px] p-3.5 text-center" style={{ background: 'var(--red-soft)', border: '1px solid rgba(239,68,68,.33)' }}>
+          <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,.33)', borderRadius: 'var(--r-lg)' }}>
             <div className="text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--red)' }}>Team B</div>
             <div className="font-display text-[62px] leading-none mb-1.5 text-chalk" id="scoreB">{currentBScore}</div>
             <div className="flex gap-1.5">
-              <button onClick={() => incrementScore('B', 1)} className="flex-1 border-0 font-bold py-[11px] rounded-[11px] cursor-pointer text-[15px] text-white" style={{ background: 'var(--red)' }}>+1</button>
-              <button onClick={() => incrementScore('B', 2)} className="flex-1 border-0 font-bold py-[11px] rounded-[11px] cursor-pointer text-[15px] text-chalk" style={{ background: 'rgba(255,255,255,.1)' }}>+2</button>
+              <button onClick={() => incrementScore('B', 1)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-white" style={{ background: 'var(--red)', borderRadius: 'var(--r-sm)' }}>+1</button>
+              <button onClick={() => incrementScore('B', 2)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-chalk" style={{ background: 'rgba(255,255,255,.1)', borderRadius: 'var(--r-sm)' }}>+2</button>
             </div>
           </div>
         </div>
@@ -60,8 +60,8 @@ export default function MatchActivePage() {
         {/* Timer */}
         <button
           onClick={() => isTimerRunning ? stopTimer() : startTimer()}
-          className="w-full flex items-center justify-center gap-2 min-h-[54px] rounded-[18px] font-heading text-[15px] font-bold tracking-wide uppercase mb-2 border-0 cursor-pointer transition-all"
-          style={{ background: 'linear-gradient(180deg, var(--orange-2), var(--orange))', color: '#0c0c0c' }}
+          className="w-full flex items-center justify-center gap-2 min-h-[54px] font-heading text-[15px] font-bold tracking-wide uppercase mb-2 border-0 cursor-pointer transition-all"
+          style={{ background: 'linear-gradient(180deg, var(--orange-2), var(--orange))', color: '#0c0c0c', borderRadius: 'var(--r-lg)' }}
         >
           <span className="w-5 h-5">{Icons.clock}</span>
           <span>{isTimerRunning ? 'Stop Game' : 'Start Game'}</span>
@@ -80,7 +80,7 @@ export default function MatchActivePage() {
               {completedGames.map(g => {
                 const aWon = g.teamAScore > g.teamBScore
                 return (
-                  <div key={g.gameNumber} className="flex-none rounded-[12px] p-[9px_12px] text-center" style={{ background: 'var(--panel)', border: `1px solid var(--line)`, borderLeft: `2px solid ${aWon ? 'var(--blue)' : 'var(--red)'}` }}>
+                  <div key={g.gameNumber} className="flex-none p-[9px_12px] text-center" style={{ background: 'var(--panel)', border: `1px solid var(--line)`, borderLeft: `3px solid ${aWon ? '#3B82F6' : '#EF4444'}`, borderRadius: 'var(--r-md)' }}>
                     <div className="text-[10px] text-[var(--faint)] font-bold">G{g.gameNumber}</div>
                     <div className="font-display text-[16px]">{g.teamAScore}–{g.teamBScore}</div>
                     <div className="text-[10px] text-[var(--dim)]">{Math.round(g.durationSeconds / 60)}m</div>
