@@ -29,9 +29,16 @@ function uuid(): string {
   return crypto.randomUUID()
 }
 
-export async function enqueue(op: Omit<QueuedOperation, 'id' | 'createdAt' | 'retries'>): Promise<void> {
+export async function enqueue(op: Omit<QueuedOperation, 'id' | 'createdAt' | 'retries'>): Promise<string> {
   const db = await getDB()
-  await db.put(STORE_NAME, { ...op, id: uuid(), createdAt: Date.now(), retries: 0 })
+  const id = uuid()
+  await db.put(STORE_NAME, { ...op, id, createdAt: Date.now(), retries: 0 })
+  return id
+}
+
+export async function dequeue(id: string): Promise<void> {
+  const db = await getDB()
+  await db.delete(STORE_NAME, id)
 }
 
 export async function getPendingCount(): Promise<number> {
@@ -48,7 +55,7 @@ export async function flush(): Promise<{ succeeded: number; failed: number }> {
   for (const op of ops) {
     try {
       if (op.operation === 'insert') {
-        const { error } = await supabase.from(op.table).insert(op.payload)
+        const { error } = await supabase.from(op.table).upsert(op.payload, { onConflict: 'id' })
         if (error) throw error
       } else if (op.operation === 'update' && op.rowId) {
         const { error } = await supabase.from(op.table).update(op.payload).eq('id', op.rowId)

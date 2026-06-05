@@ -1,12 +1,14 @@
 import { supabase } from './supabase'
-import { enqueue } from './syncQueue'
+import { enqueue, dequeue } from './syncQueue'
 
-async function trySupabase(fn: () => unknown): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function trySupabase(fn: () => PromiseLike<any>): Promise<boolean> {
   try {
-    const { error } = await (fn() as Promise<{ error: unknown }>)
-    if (error) throw error
+    const result = await fn()
+    if (result?.error) throw result.error
+    return true
   } catch {
-    // Supabase call failed — operation already enqueued; swallow
+    return false
   }
 }
 
@@ -14,8 +16,9 @@ export async function dbInsert(
   table: string,
   payload: Record<string, unknown>
 ): Promise<void> {
-  await enqueue({ table, operation: 'insert', payload })
-  await trySupabase(() => supabase.from(table).insert(payload))
+  const opId = await enqueue({ table, operation: 'insert', payload })
+  const ok = await trySupabase(() => supabase.from(table).insert(payload))
+  if (ok) await dequeue(opId)
 }
 
 export async function dbUpdate(
@@ -23,14 +26,16 @@ export async function dbUpdate(
   id: string,
   payload: Record<string, unknown>
 ): Promise<void> {
-  await enqueue({ table, operation: 'update', rowId: id, payload })
-  await trySupabase(() => supabase.from(table).update(payload).eq('id', id))
+  const opId = await enqueue({ table, operation: 'update', rowId: id, payload })
+  const ok = await trySupabase(() => supabase.from(table).update(payload).eq('id', id))
+  if (ok) await dequeue(opId)
 }
 
 export async function dbDelete(
   table: string,
   id: string
 ): Promise<void> {
-  await enqueue({ table, operation: 'delete', rowId: id, payload: {} })
-  await trySupabase(() => supabase.from(table).delete().eq('id', id))
+  const opId = await enqueue({ table, operation: 'delete', rowId: id, payload: {} })
+  const ok = await trySupabase(() => supabase.from(table).delete().eq('id', id))
+  if (ok) await dequeue(opId)
 }
