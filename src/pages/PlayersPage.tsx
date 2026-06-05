@@ -18,6 +18,7 @@ const MOCK_PLAYERS = [
 export default function PlayersPage() {
   const nav = useNavigate()
   const [query, setQuery] = useState('')
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   const filtered = MOCK_PLAYERS.filter(p =>
     p.nickname.toLowerCase().includes(query.toLowerCase()) ||
@@ -28,15 +29,19 @@ export default function PlayersPage() {
     <div className="min-h-dvh px-[18px] pt-[54px] pb-8">
       <BackButton onClick={() => nav('/')}>Dashboard</BackButton>
 
-      <div className="flex items-center justify-between mt-4 mb-4">
-        <span className="font-display text-[22px] uppercase tracking-[.02em]">Players</span>
-        <button className="w-[42px] h-[42px] rounded-[14px] grid place-items-center bg-[var(--panel)] border border-[var(--line)] text-chalk cursor-pointer hover:bg-[var(--panel-2)] transition-colors">
-          <span className="w-5 h-5">{Icons.plus}</span>
-        </button>
+      {/* Hero gradient header */}
+      <div style={{
+        background: 'var(--hero-gradient)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 'var(--r-lg)',
+        padding: '16px 18px', marginBottom: 16, marginTop: 16,
+      }}>
+        <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Roster</p>
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Players</div>
       </div>
 
       {/* Search */}
-      <div className="flex items-center gap-3 rounded-[14px] px-4 py-3 mb-4" style={{ background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+      <div className="flex items-center gap-3 px-4 py-3 mb-4" style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}>
         <span className="w-[18px] h-[18px] text-[var(--faint)]">{Icons.search}</span>
         <input
           type="text"
@@ -48,23 +53,34 @@ export default function PlayersPage() {
       </div>
 
       <div className="space-y-2 stagger">
-        {filtered.map(p => (
-          <button
-            key={p.id}
-            onClick={() => nav(`/players/${p.id}`)}
-            className="w-full flex gap-3 items-center p-[13px_14px] rounded-[12px] cursor-pointer text-left transition-all hover:bg-[var(--panel-2)]"
-            style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}
-          >
-            <Avatar nickname={p.nickname} color={p.color} />
-            <div className="flex-1">
-              <div className="font-bold text-[14px]">{p.nickname}</div>
-              <div className="text-[12px] text-[var(--dim)]">{p.name}</div>
-            </div>
-            <div className="text-[12px] text-[var(--dim)] tabular-nums font-semibold">
-              <span className="font-display text-[14px] text-chalk">{p.w}</span>W–<span className="font-display text-[14px] text-chalk">{p.l}</span>L
-            </div>
-          </button>
-        ))}
+        {filtered.map(p => {
+          const isHovered = hoveredId === p.id
+          return (
+            <button
+              key={p.id}
+              onClick={() => nav(`/players/${p.id}`)}
+              onMouseEnter={() => setHoveredId(p.id)}
+              onMouseLeave={() => setHoveredId(null)}
+              className="w-full flex gap-3 items-center p-[13px_14px] cursor-pointer text-left transition-all"
+              style={{
+                background: isHovered ? 'var(--panel-2)' : 'var(--panel)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--r-md)',
+                borderLeft: isHovered ? '3px solid var(--orange)' : '1px solid var(--line)',
+                paddingLeft: isHovered ? 11 : 14,
+              }}
+            >
+              <Avatar nickname={p.nickname} color={p.color} />
+              <div className="flex-1">
+                <div className="font-bold text-[14px]">{p.nickname}</div>
+                <div className="text-[12px] text-[var(--dim)]">{p.name}</div>
+              </div>
+              <div className="text-[12px] text-[var(--dim)] tabular-nums font-semibold">
+                <span className="font-display text-[14px] text-chalk">{p.w}</span>W–<span className="font-display text-[14px] text-chalk">{p.l}</span>L
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
