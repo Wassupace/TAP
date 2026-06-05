@@ -19,7 +19,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   setActiveSession: (id, location) =>
     set({ activeSessionId: id, activeLocation: location, elapsedSeconds: 0, notes: '' }),
   clearActiveSession: () =>
-    set({ activeSessionId: null, activeLocation: '', elapsedSeconds: 0, notes: '' }),
+    set({ activeSessionId: null, activeLocation: '', elapsedSeconds: 0 }),
   setNotes: (notes) => set({ notes }),
   tick: () => set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 })),
 }))

@@ -336,27 +336,27 @@ export default function DrillPage() {
                 )
               })}
             </div>
-
-            {/* Undo last heat */}
-            {completedHeats.length > 0 && (
-              <button
-                type="button"
-                onClick={() => undoLastHeat()}
-                style={{
-                  width: '100%', minHeight: 44,
-                  background: 'transparent',
-                  border: '1px solid var(--panel-3)',
-                  borderRadius: 'var(--r-sm)',
-                  color: 'var(--dim)', fontSize: 12, fontWeight: 700,
-                  cursor: 'pointer', marginTop: 8,
-                  fontFamily: '"Archivo Expanded", Archivo, sans-serif',
-                  letterSpacing: '0.04em', textTransform: 'uppercase' as const,
-                }}
-              >
-                ↩ Undo Last Heat
-              </button>
-            )}
           </>
+        )}
+
+        {/* Undo last heat */}
+        {completedHeats.length > 0 && (
+          <button
+            type="button"
+            onClick={() => undoLastHeat()}
+            style={{
+              width: '100%', minHeight: 44,
+              background: 'transparent',
+              border: '1px solid var(--panel-3)',
+              borderRadius: 'var(--r-sm)',
+              color: 'var(--dim)', fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', marginTop: 8,
+              fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+              letterSpacing: '0.04em', textTransform: 'uppercase' as const,
+            }}
+          >
+            ↩ Undo Last Heat
+          </button>
         )}
       </div>
 
