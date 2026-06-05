@@ -3,24 +3,42 @@ import { BackButton, Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { Icons } from '../components/ui/icons'
 import { useMatchStore } from '../stores/matchStore'
-import { ALL_FORMATS, type MatchFormat, type Player } from '../types'
-
-const MOCK_POOL: Player[] = [
-  { id: '1', nickname: 'JC',    name: 'Jordan C.',  target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-  { id: '2', nickname: 'Marcus',name: 'Marcus T.',  target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-  { id: '3', nickname: 'Dre',   name: 'Andre P.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-  { id: '4', nickname: 'Sef',   name: 'Yousef K.',  target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-  { id: '5', nickname: 'Tomas', name: 'Tomas R.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-  { id: '6', nickname: 'Leo',   name: 'Leo M.',     target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-  { id: '7', nickname: 'Kenji', name: 'Kenji S.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-  { id: '8', nickname: 'Pablo', name: 'Pablo G.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
-]
+import { usePlayers } from '../hooks/usePlayers'
+import { useSessionStore } from '../stores/sessionStore'
+import { supabase } from '../lib/supabase'
+import { ALL_FORMATS, type MatchFormat } from '../types'
 
 export default function MatchSetupPage() {
   const nav = useNavigate()
-  const { format, targetScore, teamA, teamB, subQueue, setFormat, setTargetScore, randomize } = useMatchStore()
+  const { format, targetScore, teamA, teamB, subQueue, setFormat, setTargetScore, randomize, setMatchId } = useMatchStore()
+  const { activeSessionId } = useSessionStore()
+  const { data: players = [] } = usePlayers()
 
-  const handleRandomize = () => randomize(MOCK_POOL)
+  const handleRandomize = () => randomize(players)
+
+  const handleStart = async () => {
+    if (teamA.length === 0) return
+    try {
+      const { data, error } = await supabase
+        .from('matches')
+        .insert({
+          session_id: activeSessionId,
+          format,
+          target_score: targetScore,
+          scoring_style: 'targetScore',
+          started_at: new Date().toISOString(),
+          team_a_player_ids: teamA.map((p) => p.id),
+          team_b_player_ids: teamB.map((p) => p.id),
+          sub_queue_player_ids: subQueue.map((p) => p.id),
+        })
+        .select('id')
+        .single()
+      if (!error && data) setMatchId(data.id)
+    } catch {
+      // Offline — matchId stays null, games will be queued without match FK
+    }
+    nav('/match/active')
+  }
 
   return (
     <div className="min-h-dvh pb-28">
@@ -111,7 +129,7 @@ export default function MatchSetupPage() {
       )}
 
       <div className="fixed bottom-[18px] left-[14px] right-[14px]">
-        <Button variant="primary" onClick={() => nav('/match/active')} disabled={teamA.length === 0}>
+        <Button variant="primary" onClick={handleStart} disabled={teamA.length === 0}>
           <span className="w-5 h-5">{Icons.bolt}</span>
           Start Match
         </Button>

@@ -5,6 +5,8 @@ import { Icons } from '../components/ui/icons'
 import { Avatar } from '../components/ui/Avatar'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { StatusDot } from '../components/ui/StatusDot'
+import { useOpenSession, useEndSession } from '../hooks/useSessions'
+import { useActivityFeed } from '../hooks/useActivityFeed'
 
 function fmt(s: number) {
   const h = Math.floor(s / 3600)
@@ -205,6 +207,7 @@ export default function DashboardPage() {
   const nav = useNavigate()
   const { activeSessionId, activeLocation, elapsedSeconds, tick, setActiveSession } = useSessionStore()
   const [showSetup, setShowSetup] = useState(false)
+  const openSession = useOpenSession()
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -212,9 +215,16 @@ export default function DashboardPage() {
     return () => clearInterval(id)
   }, [activeSessionId, tick])
 
-  function handleConfirm(location: string, players: string[]) {
+  async function handleConfirm(location: string, players: string[]) {
     setShowSetup(false)
-    setActiveSession(crypto.randomUUID(), location, players)
+    const today = new Date().toISOString().split('T')[0]
+    try {
+      const session = await openSession.mutateAsync({ location, date: today })
+      setActiveSession(session.id, location, players)
+    } catch {
+      // Offline fallback: use a local UUID so session still works
+      setActiveSession(crypto.randomUUID(), location, players)
+    }
   }
 
   if (!activeSessionId) {
@@ -312,16 +322,34 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: {
 function ActiveDashboard({ location, elapsed }: { location: string; elapsed: number }) {
   const nav = useNavigate()
   const [showNotesModal, setShowNotesModal] = useState(false)
-  const { clearActiveSession, notes, setNotes, players, addPlayer, removePlayer } = useSessionStore()
+  const { activeSessionId, clearActiveSession, notes, setNotes, players, addPlayer, removePlayer } = useSessionStore()
   const { status, pendingCount, lastSyncedAt } = useOnlineStatus()
   const [addingPlayer, setAddingPlayer] = useState(false)
   const [newPlayerName, setNewPlayerName] = useState('')
   const addInputRef = useRef<HTMLInputElement>(null)
+  const endSession = useEndSession()
+  const { data: activities = [] } = useActivityFeed(activeSessionId)
 
   function submitNewPlayer() {
     addPlayer(newPlayerName)
     setNewPlayerName('')
     setAddingPlayer(false)
+  }
+
+  async function handleEndSession() {
+    setShowNotesModal(false)
+    const sessionId = activeSessionId
+    clearActiveSession()
+    if (sessionId) {
+      try {
+        await endSession.mutateAsync({ id: sessionId, notes: notes || undefined })
+      } catch {
+        // ignore — session state is cleared locally regardless
+      }
+      nav(`/session-recap/${sessionId}`)
+    } else {
+      nav('/')
+    }
   }
 
   return (
@@ -461,16 +489,41 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           )}
         </div>
 
-        {/* Activity feed — empty state until activities are logged */}
+        {/* Activity feed */}
         <div className="stagger">
           <p style={S.eyebrow}>Today</p>
-          <div style={{
-            background: 'var(--panel)', border: '1px solid var(--line)',
-            borderRadius: 'var(--r-md)', padding: '24px 16px',
-            textAlign: 'center', color: 'var(--faint)', fontSize: 13,
-          }}>
-            No activities yet — hit the court and start logging.
-          </div>
+          {activities.length === 0 ? (
+            <div style={{
+              background: 'var(--panel)', border: '1px solid var(--line)',
+              borderRadius: 'var(--r-md)', padding: '24px 16px',
+              textAlign: 'center', color: 'var(--faint)', fontSize: 13,
+            }}>
+              No activities yet — hit the court and start logging.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {activities.map(a => (
+                <div key={a.id} style={{
+                  background: 'var(--panel)', border: '1px solid var(--line)',
+                  borderRadius: 'var(--r-md)', padding: '12px 14px',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--orange-soft)', color: 'var(--orange-2)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <span style={{ width: 18, height: 18 }}>
+                      {a.activity_type === 'match' ? Icons.ball : a.activity_type === 'drill' ? Icons.target : Icons.bolt}
+                    </span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'capitalize' }}>{a.activity_type}</div>
+                    {a.feed_summary && <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2 }}>{a.feed_summary}</div>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--faint)' }}>
+                    {new Date(a.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -529,11 +582,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
             </p>
             <button
               type="button"
-              onClick={() => {
-                setShowNotesModal(false)
-                clearActiveSession()
-                nav('/session-recap/mock')
-              }}
+              onClick={handleEndSession}
               style={{
                 marginTop: 16, width: '100%', minHeight: 58,
                 background: 'linear-gradient(180deg, var(--orange-2), var(--orange))',

@@ -10,6 +10,44 @@ This app is built for fast post-fact logging between runs and games, with an off
 - Previous spec baseline: docs/TAP_PRD_v5_3.md
 - Delivery plan: docs/plans/2026-06-02-tap-implementation.md
 
+## Design and Screenshots
+
+Design references:
+- Interactive design board: docs/tap-design.html
+- Product spec: docs/TAP_PRD_v5_4.md
+
+Flow story (design -> app):
+
+1. Design language and component system
+
+![TAP design system and component language](docs/screenshots/design-system-v2.png)
+
+2. Design target for active session dashboard
+
+![TAP dashboard active flow from design board](docs/screenshots/design-dashboard-active-v2.png)
+
+3. App start state (no active session)
+
+![TAP app dashboard](docs/screenshots/app-dashboard-v2.png)
+
+4. Session planning and calendar overview
+
+![TAP calendar screen](docs/screenshots/app-calendar-v2.png)
+
+5. Roster and player-centric tracking
+
+![TAP players screen](docs/screenshots/app-players-v2.png)
+
+6. Drill setup flow for shot work
+
+![TAP drill setup screen](docs/screenshots/app-drill-setup-v2.png)
+
+7. Operational controls and export/sync access
+
+![TAP settings screen](docs/screenshots/app-settings-v2.png)
+
+
+
 ## Current Implementation Status
 
 The codebase has a solid technical foundation (routing, state stores, offline queue, sync worker, schema, export plumbing), but several user flows are still using mocked in-page data.
@@ -24,9 +62,16 @@ Implemented and wired:
 - Google OAuth + Sheets export pipeline
 - Shot chart component with mode and hand filtering
 
-Partially implemented or mocked UI flows:
-- Calendar, attendance, players, profile cards, win/loss, match recap, drill recap, and session recap currently render mostly mocked display data
-- Some pages are not yet fully connected to persisted records despite store and schema support
+Supabase-wired flows:
+- Players list and profile (CRUD, real W/L and shooting stats)
+- Dashboard (open session, end session, activity feed from activity_records)
+- Calendar (month navigation, real sessions, quick-start sheet)
+- Attendance (real player list, session activation, attendance records)
+- Match setup (real player pool, creates match record)
+- Competitive setup (real player pool)
+- Match recap (real game stats, logs activity_record)
+- Drill recap (real heat stats, logs activity_record)
+- Session recap (real session data, duration, activity log)
 
 ## Tech Stack
 
@@ -123,7 +168,7 @@ Create tap-pwa/.env.local:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
 
 # Optional (only for Google Sheets export)
 VITE_GOOGLE_CLIENT_ID=YOUR_GOOGLE_OAUTH_CLIENT_ID
@@ -205,12 +250,8 @@ Inside tap-pwa/src:
 
 ## Known Gaps / Next Work
 
-- Replace mocked page data with Supabase-backed queries/mutations across calendar, attendance, players, and recap flows
-- Persist active session lifecycle end-to-end (planned -> active -> completed) from UI
-- Connect activity feed to activity_records
 - Expand export to include additional derived match and competitive result analytics
 - Add automated tests for offline queue, sync retries, and route-level flows
-- Add production icon assets in public/icons to fully match the PWA manifest references
 
 ## License
 

@@ -3,26 +3,63 @@ import { useNavigate } from 'react-router-dom'
 import { BackButton } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { Icons } from '../components/ui/icons'
+import { usePlayers, useAddPlayer } from '../hooks/usePlayers'
+import { playerColor } from '../utils/playerColor'
 
-const MOCK_PLAYERS = [
-  { id: '1', nickname: 'JC',    name: 'Jordan C.',  color: '#FF5A1F', w: 47, l: 23 },
-  { id: '2', nickname: 'Marcus',name: 'Marcus T.',  color: '#3B82F6', w: 31, l: 18 },
-  { id: '3', nickname: 'Dre',   name: 'Andre P.',   color: '#22C55E', w: 22, l: 14 },
-  { id: '4', nickname: 'Sef',   name: 'Yousef K.',  color: '#EAB308', w: 19, l: 11 },
-  { id: '5', nickname: 'Tomas', name: 'Tomas R.',   color: '#A855F7', w: 38, l: 27 },
-  { id: '6', nickname: 'Leo',   name: 'Leo M.',     color: '#EF4444', w: 14, l: 22 },
-  { id: '7', nickname: 'Kenji', name: 'Kenji S.',   color: '#06B6D4', w: 29, l: 15 },
-  { id: '8', nickname: 'Pablo', name: 'Pablo G.',   color: '#F97316', w: 41, l: 19 },
-]
+function AddPlayerSheet({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState('')
+  const [nickname, setNickname] = useState('')
+  const addPlayer = useAddPlayer()
+
+  const canSave = name.trim().length > 0 && nickname.trim().length > 0
+
+  async function handleSave() {
+    if (!canSave) return
+    await addPlayer.mutateAsync({
+      name: name.trim(),
+      nickname: nickname.trim(),
+      target_ft_percent: 0.75,
+      target_mid_percent: 0.5,
+      target_3pt_percent: 0.4,
+    })
+    onClose()
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }}
+      onClick={onClose}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}>
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 20 }}>Add Player</div>
+        <label style={{ display: 'block', marginBottom: 14 }}>
+          <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>Full Name <span style={{ color: 'var(--orange)' }}>*</span></p>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Jordan Carter" autoFocus style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${name.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+        </label>
+        <label style={{ display: 'block', marginBottom: 24 }}>
+          <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>Nickname <span style={{ color: 'var(--orange)' }}>*</span></p>
+          <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="e.g. JC" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${nickname.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+        </label>
+        <button type="button" onClick={handleSave} disabled={!canSave || addPlayer.isPending} style={{ width: '100%', minHeight: 58, background: canSave ? 'linear-gradient(180deg, var(--orange-2), var(--orange))' : 'var(--panel-2)', border: 'none', borderRadius: 'var(--r-md)', color: canSave ? '#fff' : 'var(--faint)', fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 16, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? 'var(--accent-glow)' : 'none' }}>
+          {addPlayer.isPending ? 'Saving…' : 'Add Player'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function PlayersPage() {
   const nav = useNavigate()
   const [query, setQuery] = useState('')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
 
-  const filtered = MOCK_PLAYERS.filter(p =>
-    p.nickname.toLowerCase().includes(query.toLowerCase()) ||
-    p.name.toLowerCase().includes(query.toLowerCase())
+  const { data: players = [], isLoading, isError } = usePlayers()
+
+  const filtered = players.filter(
+    (p) =>
+      p.nickname.toLowerCase().includes(query.toLowerCase()) ||
+      p.name.toLowerCase().includes(query.toLowerCase())
   )
 
   return (
@@ -37,7 +74,12 @@ export default function PlayersPage() {
         padding: '16px 18px', marginBottom: 16, marginTop: 16,
       }}>
         <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Roster</p>
-        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Players</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Players</div>
+          <button type="button" onClick={() => setShowAdd(true)} style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)', color: 'var(--chalk)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+            <span style={{ width: 18, height: 18 }}>{Icons.plus}</span>
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -52,9 +94,27 @@ export default function PlayersPage() {
         />
       </div>
 
+      {isLoading && (
+        <div style={{ textAlign: 'center', color: 'var(--faint)', fontSize: 13, padding: '40px 0' }}>Loading roster…</div>
+      )}
+
+      {isError && (
+        <div style={{ textAlign: 'center', color: 'var(--red)', fontSize: 13, padding: '40px 0' }}>Could not load players. Check your Supabase connection.</div>
+      )}
+
+      {!isLoading && !isError && players.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 'var(--r-lg)' }}>
+          <p style={{ color: 'var(--dim)', fontSize: 13, marginBottom: 16 }}>No players yet — add your crew.</p>
+          <button type="button" onClick={() => setShowAdd(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 'var(--r-md)', border: 'none', background: 'var(--orange)', color: '#fff', fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            <span style={{ width: 16, height: 16 }}>{Icons.plus}</span>Add First Player
+          </button>
+        </div>
+      )}
+
       <div className="space-y-2 stagger">
         {filtered.map(p => {
           const isHovered = hoveredId === p.id
+          const color = playerColor(p.id)
           return (
             <button
               key={p.id}
@@ -66,22 +126,21 @@ export default function PlayersPage() {
                 background: isHovered ? 'var(--panel-2)' : 'var(--panel)',
                 border: '1px solid var(--line)',
                 borderRadius: 'var(--r-md)',
-                borderLeft: isHovered ? '3px solid var(--orange)' : '1px solid var(--line)',
+                borderLeft: isHovered ? `3px solid ${color}` : '1px solid var(--line)',
                 paddingLeft: isHovered ? 11 : 14,
               }}
             >
-              <Avatar nickname={p.nickname} color={p.color} />
+              <Avatar nickname={p.nickname} color={color} />
               <div className="flex-1">
                 <div className="font-bold text-[14px]">{p.nickname}</div>
                 <div className="text-[12px] text-[var(--dim)]">{p.name}</div>
-              </div>
-              <div className="text-[12px] text-[var(--dim)] tabular-nums font-semibold">
-                <span className="font-display text-[14px] text-chalk">{p.w}</span>W–<span className="font-display text-[14px] text-chalk">{p.l}</span>L
               </div>
             </button>
           )
         })}
       </div>
+
+      {showAdd && <AddPlayerSheet onClose={() => setShowAdd(false)} />}
     </div>
   )
 }

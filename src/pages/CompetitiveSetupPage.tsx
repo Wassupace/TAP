@@ -5,13 +5,10 @@ import { Avatar } from '../components/ui/Avatar'
 import { Tag } from '../components/ui/Tag'
 import { Icons } from '../components/ui/icons'
 import { SHOT_SPOTS, SPOT_LABELS, type ShotSpot } from '../types'
+import { usePlayers } from '../hooks/usePlayers'
+import { playerColor } from '../utils/playerColor'
 
 const GAME_TYPES = ['Banks', 'Middies', 'Next', 'Generic'] as const
-const MOCK_PLAYERS = [
-  { id: '1', nickname: 'JC', color: '#FF5A1F' }, { id: '2', nickname: 'Marcus', color: '#3B82F6' },
-  { id: '3', nickname: 'Dre', color: '#22C55E' }, { id: '4', nickname: 'Sef', color: '#EAB308' },
-  { id: '5', nickname: 'Tomas', color: '#A855F7' },
-]
 
 const TAG_VARIANT: Record<typeof GAME_TYPES[number], 'banks' | 'drill' | 'match' | 'generic'> = {
   Banks: 'banks',
@@ -24,7 +21,9 @@ export default function CompetitiveSetupPage() {
   const nav = useNavigate()
   const [gameType, setGameType] = useState<typeof GAME_TYPES[number]>('Banks')
   const [spot, setSpot] = useState<ShotSpot>('center')
-  const [selectedPlayers, setSelectedPlayers] = useState(new Set(['1','2','3','4','5']))
+  const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set())
+
+  const { data: players = [] } = usePlayers()
 
   const togglePlayer = (id: string) => setSelectedPlayers(prev => {
     const next = new Set(prev)
@@ -97,21 +96,27 @@ export default function CompetitiveSetupPage() {
       {/* Players */}
       <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-2">Players · {selectedPlayers.size}</p>
       <div className="flex gap-2 flex-wrap mb-4">
-        {MOCK_PLAYERS.map(p => (
-          <button
-            key={p.id}
-            onClick={() => togglePlayer(p.id)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 border cursor-pointer transition-all"
-            style={{
-              borderRadius: 'var(--r-pill)',
-              background: selectedPlayers.has(p.id) ? 'var(--orange-soft)' : 'var(--panel-2)',
-              borderColor: selectedPlayers.has(p.id) ? 'var(--orange)' : 'var(--line)',
-            }}
-          >
-            <Avatar nickname={p.nickname} color={p.color} />
-            <span className="text-[13px] font-bold">{p.nickname}</span>
-          </button>
-        ))}
+        {players.map(p => {
+          const color = playerColor(p.id)
+          return (
+            <button
+              key={p.id}
+              onClick={() => togglePlayer(p.id)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 border cursor-pointer transition-all"
+              style={{
+                borderRadius: 'var(--r-pill)',
+                background: selectedPlayers.has(p.id) ? 'var(--orange-soft)' : 'var(--panel-2)',
+                borderColor: selectedPlayers.has(p.id) ? 'var(--orange)' : 'var(--line)',
+              }}
+            >
+              <Avatar nickname={p.nickname} color={color} />
+              <span className="text-[13px] font-bold">{p.nickname}</span>
+            </button>
+          )
+        })}
+        {players.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--faint)' }}>No players in roster. Add them in the Players page first.</p>
+        )}
       </div>
 
       <div className="fixed bottom-[18px] left-[14px] right-[14px]">
