@@ -9,13 +9,26 @@ const CALLOUTS = [
   { icon: Icons.clock,  label: 'Heat trend',    value: 'Top of key: 7, 8, 9 — strong finish' },
 ]
 
+const CALLOUT_ACCENT: Record<string, string> = {
+  'Best spot': 'var(--green)',
+  'Spot to watch': 'var(--red)',
+}
+
+function calloutAccent(label: string): string {
+  return CALLOUT_ACCENT[label] ?? 'var(--orange)'
+}
+
 export default function DrillRecapPage() {
   const nav = useNavigate()
 
   return (
     <div className="min-h-dvh flex flex-col">
-      <div className="flex-1 overflow-y-auto no-scrollbar px-[18px] pt-[54px] pb-24 stagger">
-        <div className="text-center mt-2 mb-5">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-24 stagger">
+        {/* Hero gradient header */}
+        <div
+          className="px-[18px] pt-[54px] pb-8 text-center"
+          style={{ background: 'var(--hero-gradient)' }}
+        >
           <div className="inline-grid place-items-center w-16 h-16 rounded-full mb-2" style={{ background: 'rgba(34,197,94,.16)', color: 'var(--green)' }}>
             <span className="w-6 h-6">{Icons.target}</span>
           </div>
@@ -23,9 +36,19 @@ export default function DrillRecapPage() {
           <p className="text-[var(--dim)] text-[13px] mt-1">3PT · JC · 4 spots</p>
         </div>
 
+        <div className="px-[18px] pt-5">
         {CALLOUTS.map(c => (
-          <div key={c.label} className="flex gap-3 p-[15px] rounded-[18px] mb-2.5" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
-            <div className="w-[42px] h-[42px] rounded-[12px] grid place-items-center flex-none" style={{ background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
+          <div
+            key={c.label}
+            className="flex gap-3 p-[15px] mb-2.5"
+            style={{
+              background: 'var(--panel)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-md)',
+              borderLeft: `3px solid ${calloutAccent(c.label)}`,
+            }}
+          >
+            <div className="w-[42px] h-[42px] grid place-items-center flex-none" style={{ background: 'var(--orange-soft)', color: 'var(--orange-2)', borderRadius: 'var(--r-sm)' }}>
               <span className="w-[21px] h-[21px]">{c.icon}</span>
             </div>
             <div>
@@ -34,6 +57,7 @@ export default function DrillRecapPage() {
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       <div className="absolute bottom-[18px] left-[14px] right-[14px]">

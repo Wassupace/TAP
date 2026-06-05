@@ -66,7 +66,7 @@ export default function DrillPage() {
 
           {/* Step 0 — Shot type */}
           {setupStep === 0 && (
-            <div className="stagger">
+            <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Shot type
               </p>
@@ -96,7 +96,7 @@ export default function DrillPage() {
 
           {/* Step 1 — Spots */}
           {setupStep === 1 && (
-            <div className="stagger">
+            <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Select spots
               </p>
@@ -135,7 +135,7 @@ export default function DrillPage() {
 
           {/* Step 2 — Hand selection */}
           {setupStep === 2 && (
-            <div className="stagger">
+            <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Which hand?
               </p>
@@ -165,7 +165,7 @@ export default function DrillPage() {
 
           {/* Step 3 — Heat size */}
           {setupStep === 3 && (
-            <div className="stagger">
+            <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Heat size (shots per heat)
               </p>
@@ -195,7 +195,7 @@ export default function DrillPage() {
 
           {/* Step 4 — Players (skip-able) */}
           {setupStep === 4 && (
-            <div className="stagger">
+            <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Players
               </p>
@@ -210,7 +210,7 @@ export default function DrillPage() {
 
           {/* Step 5 — Makes target */}
           {setupStep === 5 && (
-            <div className="stagger">
+            <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Makes target per spot
               </p>
@@ -286,7 +286,11 @@ export default function DrillPage() {
             return (
               <div
                 key={spot}
-                className={`flex-1 text-center py-2.5 rounded-[11px] text-[12px] font-bold spot-${state}`}
+                className={`flex-1 text-center py-2.5 text-[12px] font-bold spot-${state}`}
+                style={state === 'active'
+                  ? { background: 'var(--orange)', color: '#fff', borderRadius: 'var(--r-sm)' }
+                  : { borderRadius: 'var(--r-sm)' }
+                }
               >
                 {state === 'done' && '✓ '}{SPOT_LABELS[spot]}
               </div>
@@ -295,7 +299,7 @@ export default function DrillPage() {
         </div>
 
         {/* Makes counter */}
-        <div className="rounded-[18px] p-6 text-center mb-5" style={{ background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+        <div className="p-6 text-center mb-5" style={{ background: 'var(--panel-2)', borderRadius: 'var(--r-sm)', border: '1px solid var(--line)' }}>
           <p className="text-[11px] tracking-[.1em] uppercase text-[var(--faint)] font-bold mb-4">
             {activeSpot ? SPOT_LABELS[activeSpot] : '—'}{activePlayer ? ` · ${activePlayer.nickname || activePlayer.name} shooting` : ''}
           </p>
@@ -328,7 +332,7 @@ export default function DrillPage() {
               {heatsForCurrentSpot.map((h, i) => {
                 const pct = Math.round((h.makes / h.attempts) * 100)
                 return (
-                  <div key={i} className="flex-none rounded-[11px] p-[9px_13px] text-center" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
+                  <div key={i} className="flex-none p-[9px_13px] text-center" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', borderLeft: '3px solid var(--green)' }}>
                     <div className="text-[10px] text-[var(--faint)] font-bold">H{h.heatNumber}</div>
                     <div className="font-display text-[15px]">{h.makes}/{h.attempts}</div>
                     <div className="text-[11px]" style={{ color: 'var(--green)' }}>{pct}%</div>
@@ -362,7 +366,7 @@ export default function DrillPage() {
 
       {/* Toast */}
       {toastVisible && (
-        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 text-[#06210f] font-bold uppercase tracking-[.05em] text-[15px] rounded-[18px] px-[26px] py-4 toast-show" style={{ background: 'rgba(34,197,94,.95)', boxShadow: '0 16px 40px -10px rgba(34,197,94,.6)' }}>
+        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 text-[#06210f] font-bold uppercase tracking-[.05em] text-[15px] px-[26px] py-4 toast-show" style={{ borderRadius: 'var(--r-md)', background: 'rgba(34,197,94,.95)', boxShadow: '0 16px 40px -10px rgba(34,197,94,.6)' }}>
           ✓ Heat saved — next spot
         </div>
       )}
