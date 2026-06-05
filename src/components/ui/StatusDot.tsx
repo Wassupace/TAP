@@ -21,6 +21,7 @@ export function StatusDot({ status, pendingCount = 0, lastSyncedAt }: StatusDotP
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
+        type="button"
         onClick={() => setOpen(v => !v)}
         style={{
           display: 'flex', alignItems: 'center', gap: 5,

@@ -5,16 +5,22 @@ interface ProgressBarProps {
   height?: number
 }
 
+// Resolved hex values matching CSS token definitions
+const COLOR_GREEN  = '#10B981'
+const COLOR_YELLOW = '#F59E0B'
+const COLOR_RED    = '#EF4444'
+const COLOR_ORANGE = '#FF5A1F'
+
 export function ProgressBar({ value, goal, glow = true, height = 11 }: ProgressBarProps) {
   const pct = Math.min(1, Math.max(0, value)) * 100
   const color =
     goal === undefined
-      ? 'var(--orange)'
+      ? COLOR_ORANGE
       : value >= goal
-        ? 'var(--green)'
+        ? COLOR_GREEN
         : value >= goal * 0.8
-          ? 'var(--yellow)'
-          : 'var(--red)'
+          ? COLOR_YELLOW
+          : COLOR_RED
 
   return (
     <div style={{

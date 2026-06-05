@@ -26,6 +26,7 @@ export function HandToggle({ value, onChange, showAll = true }: HandToggleProps)
       {options.map(opt => (
         <button
           key={opt.key}
+          type="button"
           onClick={() => onChange(opt.key)}
           style={{
             flex: 1,
