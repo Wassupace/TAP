@@ -1,0 +1,117 @@
+import { useNavigate } from 'react-router-dom'
+import { BackButton, Button } from '../components/ui/Button'
+import { Avatar } from '../components/ui/Avatar'
+import { Icons } from '../components/ui/icons'
+import { useMatchStore } from '../stores/matchStore'
+import { ALL_FORMATS, type MatchFormat, type Player } from '../types'
+
+const MOCK_POOL: Player[] = [
+  { id: '1', nickname: 'JC',    name: 'Jordan C.',  target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+  { id: '2', nickname: 'Marcus',name: 'Marcus T.',  target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+  { id: '3', nickname: 'Dre',   name: 'Andre P.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+  { id: '4', nickname: 'Sef',   name: 'Yousef K.',  target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+  { id: '5', nickname: 'Tomas', name: 'Tomas R.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+  { id: '6', nickname: 'Leo',   name: 'Leo M.',     target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+  { id: '7', nickname: 'Kenji', name: 'Kenji S.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+  { id: '8', nickname: 'Pablo', name: 'Pablo G.',   target_ft_percent:.75, target_mid_percent:.5, target_3pt_percent:.4, created_at:'' },
+]
+
+export default function MatchSetupPage() {
+  const nav = useNavigate()
+  const { format, targetScore, teamA, teamB, subQueue, setFormat, setTargetScore, randomize } = useMatchStore()
+
+  const handleRandomize = () => randomize(MOCK_POOL)
+
+  return (
+    <div className="min-h-dvh px-[18px] pt-[54px] pb-28">
+      <BackButton onClick={() => nav('/')}>Session</BackButton>
+      <div className="flex items-center justify-between mt-4 mb-4">
+        <span className="font-display text-[22px] uppercase tracking-[.02em]">New Match</span>
+      </div>
+
+      {/* Format */}
+      <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-2">Format</p>
+      <div className="grid grid-cols-5 gap-[7px] mb-4">
+        {ALL_FORMATS.map(f => (
+          <button
+            key={f}
+            onClick={() => setFormat(f as MatchFormat)}
+            className="flex justify-center items-center py-[11px] rounded-full text-[12px] font-bold border cursor-pointer transition-all"
+            style={{
+              background: format === f ? 'var(--orange)' : 'var(--panel-2)',
+              color: format === f ? '#0c0c0c' : 'var(--dim)',
+              borderColor: format === f ? 'var(--orange)' : 'var(--line)',
+            }}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {/* Target + Scoring */}
+      <div className="grid grid-cols-2 gap-2.5 mb-4">
+        <div>
+          <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-2">Target</p>
+          <div className="flex items-center justify-between rounded-[14px] p-1.5" style={{ background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+            <button onClick={() => setTargetScore(Math.max(1, targetScore - 1))} className="w-[44px] h-[44px] rounded-[10px] border-0 text-chalk text-[22px] font-bold cursor-pointer active:bg-[var(--orange)] active:text-[#0c0c0c]" style={{ background: 'var(--panel-3)' }}>−</button>
+            <span className="font-display text-[24px]">{targetScore}</span>
+            <button onClick={() => setTargetScore(targetScore + 1)} className="w-[44px] h-[44px] rounded-[10px] border-0 text-chalk text-[22px] font-bold cursor-pointer active:bg-[var(--orange)] active:text-[#0c0c0c]" style={{ background: 'var(--panel-3)' }}>+</button>
+          </div>
+        </div>
+        <div>
+          <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-2">Scoring</p>
+          <div className="flex rounded-[14px] overflow-hidden" style={{ border: '1px solid var(--line)' }}>
+            <button className="flex-1 py-3 text-[12px] font-bold border-0 cursor-pointer" style={{ background: 'var(--orange)', color: '#0c0c0c' }}>Target</button>
+            <button className="flex-1 py-3 text-[12px] font-bold border-0 cursor-pointer" style={{ background: 'var(--panel-2)', color: 'var(--dim)' }}>Wave</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Teams */}
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold">Teams</p>
+        <button onClick={handleRandomize} className="flex items-center gap-1.5 bg-transparent border-0 cursor-pointer font-bold text-[13px]" style={{ color: 'var(--orange-2)' }}>
+          <span className="w-4 h-4">{Icons.shuffle}</span> Re-shuffle
+        </button>
+      </div>
+
+      {teamA.length === 0 && teamB.length === 0 ? (
+        <button onClick={handleRandomize} className="w-full py-4 rounded-[14px] border-dashed border text-[14px] text-[var(--dim)] mb-3" style={{ background: 'var(--panel)', borderColor: 'var(--line-2)' }}>
+          Tap Re-shuffle to assign teams
+        </button>
+      ) : (
+        <>
+          {[{ label: 'Team A', col: 'var(--blue)', soft: 'var(--blue-soft)', players: teamA, side: 'A' as const },
+            { label: 'Team B', col: 'var(--red)',  soft: 'var(--red-soft)',  players: teamB, side: 'B' as const }].map(team => (
+            <div key={team.label} className="rounded-[18px] p-4 mb-2.5" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderLeft: `3px solid ${team.col}` }}>
+              <p className="text-[11px] tracking-[.2em] uppercase font-bold mb-2" style={{ color: team.col }}>{team.label}</p>
+              <div className="flex gap-2 flex-wrap">
+                {team.players.map(p => (
+                  <div key={p.id} className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5" style={{ background: team.soft }}>
+                    <Avatar nickname={p.nickname} />
+                    <span className="text-[13px] font-bold">{p.nickname}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {subQueue.length > 0 && (
+            <div className="rounded-[18px] p-4" style={{ background: 'var(--panel)', border: '1px dashed var(--line-2)' }}>
+              <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-2">Sub queue</p>
+              <div className="flex gap-2 flex-wrap">
+                {subQueue.map(p => <Avatar key={p.id} nickname={p.nickname} />)}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="fixed bottom-[18px] left-[14px] right-[14px]">
+        <Button variant="primary" onClick={() => nav('/match/active')} disabled={teamA.length === 0}>
+          <span className="w-5 h-5">{Icons.bolt}</span>
+          Start Match
+        </Button>
+      </div>
+    </div>
+  )
+}
