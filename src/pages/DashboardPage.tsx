@@ -1,32 +1,10 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../stores/sessionStore'
 import { Icons } from '../components/ui/icons'
 import { Avatar } from '../components/ui/Avatar'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { StatusDot } from '../components/ui/StatusDot'
-
-const MOCK_PLAYERS = [
-  { id: '1', nickname: 'JC',    color: '#FF5A1F' },
-  { id: '2', nickname: 'Marcus',color: '#3B82F6' },
-  { id: '3', nickname: 'Dre',   color: '#22C55E' },
-  { id: '4', nickname: 'Sef',   color: '#EAB308' },
-  { id: '5', nickname: 'Tomas', color: '#A855F7' },
-  { id: '6', nickname: 'Leo',   color: '#EF4444' },
-]
-
-const MOCK_FEED = [
-  { type: 'match', title: '3v3 Match',       summary: 'Team A won 4–1 · 6 games', time: '42m' },
-  { type: 'drill', title: 'Free Throw Drill', summary: '100 shots · 82% · solo',  time: '18m' },
-  { type: 'comp',  title: 'Banks',            summary: 'JC won by 7 · 5 players', time: '24m' },
-  { type: 'match', title: '4v4 Match',        summary: 'Team B won 3–2 · 5 games',time: '38m' },
-]
-
-const FEED_CONFIG: Record<string, { bg: string; color: string; icon: React.ReactNode }> = {
-  match: { bg: 'var(--orange-soft)', color: 'var(--orange-2)', icon: <span style={{ width: 19, height: 19, display: 'flex' }}>{Icons.ball}</span> },
-  drill: { bg: 'rgba(34,197,94,.14)', color: 'var(--green)',   icon: <span style={{ width: 19, height: 19, display: 'flex' }}>{Icons.target}</span> },
-  comp:  { bg: 'rgba(59,130,246,.14)', color: 'var(--blue)',   icon: <span style={{ width: 19, height: 19, display: 'flex' }}>{Icons.trophy}</span> },
-}
 
 function fmt(s: number) {
   const h = Math.floor(s / 3600)
@@ -38,38 +16,13 @@ function fmt(s: number) {
 const S = {
   iconBtn: {
     width: 42, height: 42, borderRadius: 14, display: 'grid', placeItems: 'center' as const,
-    background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--chalk)', cursor: 'pointer', flexShrink: 0,
+    background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--chalk)',
+    cursor: 'pointer', flexShrink: 0,
   } as React.CSSProperties,
   eyebrow: {
     fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase' as const,
     color: 'var(--faint)', fontWeight: 700, margin: '0 0 8px',
   } as React.CSSProperties,
-  card: {
-    background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)',
-  } as React.CSSProperties,
-}
-
-import React from 'react'
-
-export default function DashboardPage() {
-  const nav = useNavigate()
-  const { activeSessionId, activeLocation, elapsedSeconds, tick, setActiveSession } = useSessionStore()
-
-  useEffect(() => {
-    if (!activeSessionId) return
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [activeSessionId, tick])
-
-  if (!activeSessionId) {
-    return <IdleDashboard
-      onStart={() => setActiveSession('mock-session-1', 'Levallois Gym')}
-      onCalendar={() => nav('/calendar')}
-      onPlayers={() => nav('/players')}
-    />
-  }
-
-  return <ActiveDashboard location={activeLocation} elapsed={elapsedSeconds} />
 }
 
 function GearIcon() {
@@ -81,18 +34,228 @@ function GearIcon() {
   )
 }
 
-function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void; onCalendar: () => void; onPlayers: () => void }) {
+// ── Setup modal ────────────────────────────────────────────────────────────────
+
+function NewSessionModal({ onClose, onConfirm }: {
+  onClose: () => void
+  onConfirm: (location: string, players: string[]) => void
+}) {
+  const [location, setLocation] = useState('')
+  const [players, setPlayers]   = useState<string[]>([])
+  const [input, setInput]       = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function addPlayer() {
+    const name = input.trim()
+    if (!name || players.includes(name)) return
+    setPlayers(p => [...p, name])
+    setInput('')
+    inputRef.current?.focus()
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); addPlayer() }
+  }
+
+  const canStart = location.trim().length > 0
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 80,
+        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', background: 'var(--panel)',
+          borderRadius: 'var(--r-lg) var(--r-lg) 0 0',
+          padding: '24px 18px 40px',
+          maxHeight: '85dvh', overflowY: 'auto',
+        }}
+      >
+        {/* Title */}
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 20 }}>
+          New Session
+        </div>
+
+        {/* Location */}
+        <label style={{ display: 'block', marginBottom: 16 }}>
+          <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+            Gym / Location <span style={{ color: 'var(--orange)' }}>*</span>
+          </p>
+          <input
+            type="text"
+            value={location}
+            onChange={e => setLocation(e.target.value)}
+            placeholder="e.g. Levallois Gym"
+            autoFocus
+            style={{
+              width: '100%', background: 'var(--panel-2)',
+              border: `1px solid ${location.trim() ? 'var(--orange)' : 'var(--line-2)'}`,
+              borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16,
+              padding: '12px 14px', outline: 'none',
+              fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box',
+            }}
+          />
+        </label>
+
+        {/* Players */}
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+            Players on Court <span style={{ color: 'var(--faint)', fontWeight: 400, textTransform: 'none' }}>— optional</span>
+          </p>
+
+          {/* Input row */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Nickname"
+              style={{
+                flex: 1, background: 'var(--panel-2)', border: '1px solid var(--line-2)',
+                borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 15,
+                padding: '10px 14px', outline: 'none',
+                fontFamily: 'Archivo, sans-serif',
+              }}
+            />
+            <button
+              type="button"
+              onClick={addPlayer}
+              disabled={!input.trim()}
+              style={{
+                padding: '0 16px', borderRadius: 'var(--r-sm)', border: 'none',
+                background: input.trim() ? 'var(--orange)' : 'var(--panel-3)',
+                color: input.trim() ? '#fff' : 'var(--faint)',
+                fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                fontWeight: 700, fontSize: 13, cursor: input.trim() ? 'pointer' : 'not-allowed',
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+                transition: 'all 0.15s',
+              }}
+            >
+              Add
+            </button>
+          </div>
+
+          {/* Player chips */}
+          {players.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {players.map(name => (
+                <div
+                  key={name}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'rgba(255,90,31,0.12)', border: '1px solid rgba(255,90,31,0.3)',
+                    borderRadius: 20, padding: '5px 10px 5px 5px',
+                  }}
+                >
+                  <Avatar nickname={name} size={24} variant="active" />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--chalk)' }}>{name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPlayers(p => p.filter(x => x !== name))}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--faint)', fontSize: 16, lineHeight: 1, padding: 0, marginLeft: 2,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Confirm button */}
+        <button
+          type="button"
+          onClick={() => canStart && onConfirm(location.trim(), players)}
+          disabled={!canStart}
+          style={{
+            width: '100%', minHeight: 58,
+            background: canStart
+              ? 'linear-gradient(180deg, var(--orange-2), var(--orange))'
+              : 'var(--panel-2)',
+            border: 'none', borderRadius: 'var(--r-md)',
+            color: canStart ? '#fff' : 'var(--faint)',
+            fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+            fontWeight: 800, fontSize: 16, textTransform: 'uppercase',
+            letterSpacing: '0.04em', cursor: canStart ? 'pointer' : 'not-allowed',
+            boxShadow: canStart ? 'var(--accent-glow)' : 'none',
+            transition: 'all 0.15s',
+          }}
+        >
+          Open Session
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Dashboard root ─────────────────────────────────────────────────────────────
+
+export default function DashboardPage() {
+  const nav = useNavigate()
+  const { activeSessionId, activeLocation, elapsedSeconds, tick, setActiveSession } = useSessionStore()
+  const [showSetup, setShowSetup] = useState(false)
+
+  useEffect(() => {
+    if (!activeSessionId) return
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [activeSessionId, tick])
+
+  function handleConfirm(location: string, players: string[]) {
+    setShowSetup(false)
+    setActiveSession(crypto.randomUUID(), location, players)
+  }
+
+  if (!activeSessionId) {
+    return (
+      <>
+        <IdleDashboard
+          onStart={() => setShowSetup(true)}
+          onCalendar={() => nav('/calendar')}
+          onPlayers={() => nav('/players')}
+        />
+        {showSetup && (
+          <NewSessionModal
+            onClose={() => setShowSetup(false)}
+            onConfirm={handleConfirm}
+          />
+        )}
+      </>
+    )
+  }
+
+  return <ActiveDashboard location={activeLocation} elapsed={elapsedSeconds} />
+}
+
+// ── Idle state ─────────────────────────────────────────────────────────────────
+
+function IdleDashboard({ onStart, onCalendar, onPlayers }: {
+  onStart: () => void
+  onCalendar: () => void
+  onPlayers: () => void
+}) {
   const nav = useNavigate()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', padding: '54px 18px 0' }}>
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <button onClick={onPlayers} style={S.iconBtn}>
+        <button type="button" onClick={onPlayers} style={S.iconBtn}>
           <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.roster}</span>
         </button>
         <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 18, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.02em' }}>TAP</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCalendar} style={S.iconBtn}>
+          <button type="button" onClick={onCalendar} style={S.iconBtn}>
             <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.calendar}</span>
           </button>
           <button type="button" onClick={() => nav('/settings')} style={S.iconBtn}>
@@ -109,16 +272,21 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void
 
         <div>
           <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 24, textTransform: 'uppercase' }}>No Active Session</div>
-          <p style={{ color: 'var(--dim)', fontSize: 13, marginTop: 8, maxWidth: 240 }}>Start logging when you hit the court. Or open a planned session from the calendar.</p>
+          <p style={{ color: 'var(--dim)', fontSize: 13, marginTop: 8, maxWidth: 240 }}>
+            Start logging when you hit the court. Or open a planned session from the calendar.
+          </p>
         </div>
 
         <button
+          type="button"
           onClick={onStart}
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexDirection: 'row',
-            width: 280, minHeight: 72, borderRadius: 'var(--r-lg)', fontFamily: '"Archivo Expanded", Archivo, sans-serif',
-            fontWeight: 800, fontSize: 18, letterSpacing: '.02em', textTransform: 'uppercase', cursor: 'pointer',
-            border: 0, color: '#0c0c0c', background: 'linear-gradient(180deg,var(--orange-2),var(--orange))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            width: 280, minHeight: 72, borderRadius: 'var(--r-lg)',
+            fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+            fontWeight: 800, fontSize: 18, letterSpacing: '.02em', textTransform: 'uppercase',
+            cursor: 'pointer', border: 0, color: '#fff',
+            background: 'linear-gradient(180deg,var(--orange-2),var(--orange))',
             boxShadow: '0 12px 28px -10px rgba(255,90,31,.7)',
           }}
         >
@@ -126,7 +294,11 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void
           Start New Session
         </button>
 
-        <button onClick={onCalendar} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--dim)', fontWeight: 700, fontSize: 13, background: 'none', border: 0, cursor: 'pointer' }}>
+        <button
+          type="button"
+          onClick={onCalendar}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--dim)', fontWeight: 700, fontSize: 13, background: 'none', border: 0, cursor: 'pointer' }}
+        >
           <span style={{ width: 16, height: 16, display: 'flex' }}>{Icons.calendar}</span>
           View planned sessions
         </button>
@@ -135,24 +307,34 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void
   )
 }
 
+// ── Active session ─────────────────────────────────────────────────────────────
+
 function ActiveDashboard({ location, elapsed }: { location: string; elapsed: number }) {
   const nav = useNavigate()
   const [showNotesModal, setShowNotesModal] = useState(false)
-  const { clearActiveSession, notes, setNotes } = useSessionStore()
+  const { clearActiveSession, notes, setNotes, players, addPlayer, removePlayer } = useSessionStore()
   const { status, pendingCount, lastSyncedAt } = useOnlineStatus()
+  const [addingPlayer, setAddingPlayer] = useState(false)
+  const [newPlayerName, setNewPlayerName] = useState('')
+  const addInputRef = useRef<HTMLInputElement>(null)
+
+  function submitNewPlayer() {
+    addPlayer(newPlayerName)
+    setNewPlayerName('')
+    setAddingPlayer(false)
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-      {/* Scrollable content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '54px 18px 96px' }}>
 
         {/* Top icon row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <button onClick={() => nav('/players')} style={S.iconBtn}>
+          <button type="button" onClick={() => nav('/players')} style={S.iconBtn}>
             <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.roster}</span>
           </button>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => nav('/calendar')} style={S.iconBtn}>
+            <button type="button" onClick={() => nav('/calendar')} style={S.iconBtn}>
               <span style={{ width: 20, height: 20, display: 'flex' }}>{Icons.calendar}</span>
             </button>
             <button type="button" onClick={() => nav('/settings')} style={S.iconBtn}>
@@ -161,16 +343,14 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           </div>
         </div>
 
-        {/* Session header card */}
+        {/* Session hero card */}
         <div className="stagger" style={{
-          background: 'var(--hero-gradient)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'var(--hero-gradient)', border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: 'var(--r-lg)', padding: '16px 18px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginBottom: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16,
         }}>
           <div>
-            <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>
+            <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>
               Active Session
             </p>
             <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 19 }}>
@@ -183,90 +363,113 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           <StatusDot status={status} pendingCount={pendingCount} lastSyncedAt={lastSyncedAt} />
         </div>
 
-        {/* Action Hub — two large blocky buttons */}
+        {/* Action Hub */}
         <div className="stagger" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-          {/* New Match — primary orange */}
-          <button
-            onClick={() => nav('/match/setup')}
-            style={{
-              minHeight: 72, borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 6, border: 0, cursor: 'pointer',
-              fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
-              fontSize: 16, letterSpacing: '.02em', textTransform: 'uppercase',
-              color: '#0c0c0c', background: 'linear-gradient(180deg,var(--orange-2),var(--orange))',
-              boxShadow: '0 12px 28px -10px rgba(255,90,31,.7)',
-            }}
-          >
+          <button type="button" onClick={() => nav('/match/setup')} style={{
+            minHeight: 72, borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 6, border: 0, cursor: 'pointer',
+            fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
+            fontSize: 16, letterSpacing: '.02em', textTransform: 'uppercase',
+            color: '#fff', background: 'linear-gradient(180deg,var(--orange-2),var(--orange))',
+            boxShadow: '0 12px 28px -10px rgba(255,90,31,.7)',
+          }}>
             <span style={{ width: 24, height: 24, display: 'flex' }}>{Icons.ball}</span>
             <span>New Match</span>
           </button>
 
-          {/* New Activity — ghost dark */}
-          <button
-            onClick={() => nav('/activity/setup')}
-            style={{
-              minHeight: 72, borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px solid var(--line-2)',
-              cursor: 'pointer', fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
-              fontSize: 16, letterSpacing: '.02em', textTransform: 'uppercase',
-              color: 'var(--chalk)', background: 'var(--panel-2)',
-            }}
-          >
+          <button type="button" onClick={() => nav('/activity/setup')} style={{
+            minHeight: 72, borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px solid var(--line-2)',
+            cursor: 'pointer', fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
+            fontSize: 16, letterSpacing: '.02em', textTransform: 'uppercase',
+            color: 'var(--chalk)', background: 'var(--panel-2)',
+          }}>
             <span style={{ width: 24, height: 24, display: 'flex' }}>{Icons.target}</span>
             <span>New Activity</span>
           </button>
         </div>
 
-        {/* Shooting Drill — full-width secondary button */}
         <div className="stagger" style={{ marginBottom: 20 }}>
-          <button
-            type="button"
-            onClick={() => nav('/drill')}
-            style={{
-              width: '100%', minHeight: 50,
-              borderRadius: 'var(--r-md)',
-              display: 'flex', flexDirection: 'row',
-              alignItems: 'center', justifyContent: 'center', gap: 8,
-              border: '1px solid var(--line-2)',
-              cursor: 'pointer',
-              fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
-              fontSize: 14, letterSpacing: '0.02em', textTransform: 'uppercase' as const,
-              color: 'var(--chalk)', background: 'var(--panel-2)',
-            }}
-          >
+          <button type="button" onClick={() => nav('/drill')} style={{
+            width: '100%', minHeight: 50, borderRadius: 'var(--r-md)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            border: '1px solid var(--line-2)', cursor: 'pointer',
+            fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
+            fontSize: 14, letterSpacing: '0.02em', textTransform: 'uppercase',
+            color: 'var(--chalk)', background: 'var(--panel-2)',
+          }}>
             <span style={{ width: 18, height: 18, display: 'flex' }}>{Icons.target}</span>
             Shooting Drill
           </button>
         </div>
 
-        {/* On court roster chips */}
+        {/* On court roster */}
         <div className="stagger">
-          <p style={S.eyebrow}>On Court · {MOCK_PLAYERS.length}</p>
-          <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 14, marginBottom: 8, scrollbarWidth: 'none' }}>
-            {MOCK_PLAYERS.map(p => <Avatar key={p.id} nickname={p.nickname} color={p.color} />)}
-            <div style={{ width: 38, height: 38, minWidth: 38, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--panel-3)', color: 'var(--dim)', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>+</div>
+          <p style={S.eyebrow}>On Court{players.length > 0 ? ` · ${players.length}` : ''}</p>
+          <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 14, marginBottom: 8, scrollbarWidth: 'none', alignItems: 'center' }}>
+            {players.map(name => (
+              <button
+                key={name}
+                type="button"
+                title={`Remove ${name}`}
+                onClick={() => removePlayer(name)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
+              >
+                <Avatar nickname={name} variant="active" />
+              </button>
+            ))}
+
+            {/* Add player inline */}
+            {addingPlayer ? (
+              <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0 }}>
+                <input
+                  ref={addInputRef}
+                  autoFocus
+                  value={newPlayerName}
+                  onChange={e => setNewPlayerName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submitNewPlayer(); if (e.key === 'Escape') setAddingPlayer(false) }}
+                  placeholder="Nickname"
+                  style={{
+                    width: 90, background: 'var(--panel-2)', border: '1px solid var(--orange)',
+                    borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 13,
+                    padding: '6px 10px', outline: 'none', fontFamily: 'Archivo, sans-serif',
+                  }}
+                />
+                <button type="button" onClick={submitNewPlayer} style={{
+                  background: 'var(--orange)', border: 'none', borderRadius: 'var(--r-sm)',
+                  color: '#fff', fontSize: 13, fontWeight: 700, padding: '6px 10px', cursor: 'pointer',
+                }}>✓</button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddingPlayer(true)}
+                style={{
+                  width: 38, height: 38, minWidth: 38, borderRadius: '50%', display: 'grid',
+                  placeItems: 'center', background: 'var(--panel-3)', color: 'var(--dim)',
+                  fontSize: 20, fontWeight: 400, flexShrink: 0, border: 'none', cursor: 'pointer',
+                }}
+              >
+                +
+              </button>
+            )}
           </div>
+          {players.length === 0 && !addingPlayer && (
+            <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: -6, marginBottom: 8 }}>
+              Tap + to add players — or leave empty for a solo session.
+            </p>
+          )}
         </div>
 
-        {/* Activity feed */}
+        {/* Activity feed — empty state until activities are logged */}
         <div className="stagger">
           <p style={S.eyebrow}>Today</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {MOCK_FEED.map((item, i) => {
-              const cfg = FEED_CONFIG[item.type]
-              return (
-                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderLeft: `3px solid ${cfg.color}`, borderRadius: 'var(--r-sm)' }}>
-                  <div style={{ width: 38, height: 38, minWidth: 38, borderRadius: 11, display: 'grid', placeItems: 'center', background: cfg.bg, color: cfg.color, flexShrink: 0 }}>
-                    {cfg.icon}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{item.title}</div>
-                    <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2 }}>{item.summary}</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--faint)', fontWeight: 600, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{item.time} ago</div>
-                </div>
-              )
-            })}
+          <div style={{
+            background: 'var(--panel)', border: '1px solid var(--line)',
+            borderRadius: 'var(--r-md)', padding: '24px 16px',
+            textAlign: 'center', color: 'var(--faint)', fontSize: 13,
+          }}>
+            No activities yet — hit the court and start logging.
           </div>
         </div>
       </div>
@@ -274,10 +477,12 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
       {/* Floating End Session */}
       <div style={{ position: 'fixed', bottom: 18, left: 14, right: 14 }}>
         <button
+          type="button"
           onClick={() => setShowNotesModal(true)}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%',
-            minHeight: 54, borderRadius: 'var(--r-md)', fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+            minHeight: 54, borderRadius: 'var(--r-md)',
+            fontFamily: '"Archivo Expanded", Archivo, sans-serif',
             fontWeight: 800, fontSize: 14, letterSpacing: '.02em', textTransform: 'uppercase',
             cursor: 'pointer', border: '1px solid var(--line-2)', background: 'var(--panel-2)', color: 'var(--dim)',
           }}
@@ -286,6 +491,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
         </button>
       </div>
 
+      {/* Notes modal */}
       {showNotesModal && (
         <div
           style={{
@@ -303,7 +509,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
               padding: '20px 18px 36px',
             }}
           >
-            <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 12 }}>
+            <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 12 }}>
               Session Notes — Optional
             </p>
             <textarea
@@ -315,10 +521,10 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
                 width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line-2)',
                 borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 15,
                 padding: '12px 14px', resize: 'none', height: 100, outline: 'none',
-                fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' as const,
+                fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box',
               }}
             />
-            <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4, textAlign: 'right' as const }}>
+            <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4, textAlign: 'right' }}>
               {notes.length}/500
             </p>
             <button
@@ -333,7 +539,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
                 background: 'linear-gradient(180deg, var(--orange-2), var(--orange))',
                 border: 'none', borderRadius: 'var(--r-md)', color: '#fff',
                 fontFamily: '"Archivo Expanded", Archivo, sans-serif',
-                fontWeight: 800, fontSize: 15, textTransform: 'uppercase' as const,
+                fontWeight: 800, fontSize: 15, textTransform: 'uppercase',
                 letterSpacing: '0.04em', cursor: 'pointer',
                 boxShadow: 'var(--accent-glow)',
               }}

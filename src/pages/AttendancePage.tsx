@@ -26,7 +26,10 @@ export default function AttendancePage() {
   })
 
   const open = () => {
-    setActiveSession('mock-session-1', 'Levallois Gym')
+    const presentPlayers = MOCK_PLAYERS
+      .filter(p => checked.has(p.id))
+      .map(p => p.nickname)
+    setActiveSession(crypto.randomUUID(), 'Levallois Gym', presentPlayers)
     nav('/')
   }
 
