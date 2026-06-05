@@ -10,7 +10,9 @@ function fmtSec(s: number) {
 
 export default function MatchActivePage() {
   const nav = useNavigate()
-  const { targetScore, currentAScore, currentBScore, isTimerRunning, timerSeconds, completedGames, incrementScore, startTimer, stopTimer, tickTimer, endGame } = useMatchStore()
+  const { targetScore, currentAScore, currentBScore, isTimerRunning, timerSeconds, completedGames, incrementScore, startTimer, stopTimer, tickTimer, endGame, undoLastGame } = useMatchStore()
+
+  const canUndo = completedGames.length > 0 && !isTimerRunning
 
   useEffect(() => {
     if (!isTimerRunning) return
@@ -87,6 +89,30 @@ export default function MatchActivePage() {
               })}
             </div>
           </>
+        )}
+
+        {canUndo && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6, marginBottom: 10 }}>
+            <button
+              type="button"
+              onClick={() => undoLastGame()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'transparent',
+                border: '1.5px solid var(--panel-3)',
+                borderRadius: 'var(--r-sm)',
+                padding: '7px 14px',
+                color: 'var(--dim)',
+                fontSize: 12, fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase' as const,
+              }}
+            >
+              ↩ Undo Game {completedGames.length}
+            </button>
+          </div>
         )}
       </div>
 
