@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    coverage: { reporter: ['text', 'lcov'] },
+  },
   plugins: [
     react(),
     VitePWA({

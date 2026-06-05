@@ -107,7 +107,7 @@ export async function exportToSheets(): Promise<void> {
 
   // Create a new spreadsheet if none is linked yet
   if (!sheetId) {
-    const tabNames = ['Sessions', 'Matches', 'Competitive Games', 'Drills', 'Players', 'Career Stats']
+    const tabNames = ['Sessions', 'Matches', 'Games', 'Competitive Games', 'Drills', 'Players', 'Career Stats']
     const res = await apiPost('https://sheets.googleapis.com/v4/spreadsheets', {
       properties: { title: 'TAP — Export' },
       sheets: tabNames.map(title => ({ properties: { title } })),
@@ -131,11 +131,6 @@ export async function exportToSheets(): Promise<void> {
       supabase.from('players').select('*'),
     ])
 
-  // Suppress unused variable warnings for queries reserved for future use
-  void matches
-  void games
-  void compResults
-
   const sessionsData: SheetData = [
     ['id', 'date', 'location', 'state', 'started_at', 'ended_at', 'notes'],
     ...(sessions.data ?? []).map(s => [
@@ -144,20 +139,66 @@ export async function exportToSheets(): Promise<void> {
     ]),
   ]
 
+  // Matches: one row per match with derived win totals
+  const gamesAll = games.data ?? []
   const matchesData: SheetData = [
-    ['id', 'session_id', 'format', 'target_score', 'scoring_style', 'started_at', 'ended_at'],
-    ...(matches.data ?? []).map(m => [
-      m.id, m.session_id, m.format, m.target_score,
-      m.scoring_style, m.started_at, m.ended_at ?? null,
-    ]),
+    ['id', 'session_id', 'format', 'target_score', 'scoring_style',
+     'started_at', 'ended_at', 'total_games', 'team_a_wins', 'team_b_wins', 'avg_margin_pts'],
+    ...(matches.data ?? []).map(m => {
+      const mg = gamesAll.filter(g => g.match_id === m.id)
+      const aWins = mg.filter(g => g.team_a_score > g.team_b_score).length
+      const bWins = mg.filter(g => g.team_b_score > g.team_a_score).length
+      const margins = mg.map(g => Math.abs(g.team_a_score - g.team_b_score))
+      const avgMargin = margins.length > 0
+        ? Math.round(margins.reduce((s, v) => s + v, 0) / margins.length)
+        : null
+      return [
+        m.id, m.session_id, m.format, m.target_score, m.scoring_style,
+        m.started_at, m.ended_at ?? null, mg.length, aWins, bWins, avgMargin,
+      ]
+    }),
   ]
 
+  // Games: individual game scores
+  const gamesData: SheetData = [
+    ['id', 'match_id', 'game_number', 'team_a_score', 'team_b_score',
+     'winner', 'margin', 'duration_seconds', 'started_at', 'ended_at'],
+    ...gamesAll.map(g => {
+      const winner = g.team_a_score > g.team_b_score ? 'Team A'
+        : g.team_b_score > g.team_a_score ? 'Team B' : 'Tie'
+      return [
+        g.id, g.match_id, g.game_number,
+        g.team_a_score, g.team_b_score,
+        winner, Math.abs(g.team_a_score - g.team_b_score), g.duration_seconds,
+        g.started_at ?? null, g.ended_at ?? null,
+      ]
+    }),
+  ]
+
+  // Competitive Games: game metadata + per-player result rows
+  const compResultsAll = compResults.data ?? []
   const compData: SheetData = [
-    ['id', 'session_id', 'game_type', 'spot', 'quota_per_player', 'custom_name', 'started_at'],
-    ...(compGames.data ?? []).map(g => [
-      g.id, g.session_id, g.game_type,
-      g.spot ?? null, g.quota_per_player ?? null, g.custom_name ?? null, g.started_at,
-    ]),
+    ['game_id', 'session_id', 'game_type', 'spot', 'quota_per_player',
+     'custom_name', 'started_at', 'player_id', 'rank', 'score', 'makes', 'attempts', 'pct'],
+    ...(compGames.data ?? []).flatMap(g => {
+      const results = compResultsAll.filter(r => r.game_id === g.id)
+      if (results.length === 0) {
+        return [[
+          g.id, g.session_id, g.game_type,
+          g.spot ?? null, g.quota_per_player ?? null, g.custom_name ?? null,
+          g.started_at, null, null, null, null, null, null,
+        ]]
+      }
+      return results.map(r => {
+        const pct = r.attempts > 0 ? Math.round((r.makes / r.attempts) * 100) : null
+        return [
+          g.id, g.session_id, g.game_type,
+          g.spot ?? null, g.quota_per_player ?? null, g.custom_name ?? null,
+          g.started_at, r.player_id, r.rank, r.score ?? null,
+          r.makes ?? null, r.attempts ?? null, pct,
+        ]
+      })
+    }),
   ]
 
   const drillsData: SheetData = [
@@ -199,8 +240,8 @@ export async function exportToSheets(): Promise<void> {
     }),
   ]
 
-  const tabNames  = ['Sessions', 'Matches', 'Competitive Games', 'Drills', 'Players', 'Career Stats']
-  const tabData   = [sessionsData, matchesData, compData, drillsData, playersData, careerData]
+  const tabNames  = ['Sessions', 'Matches', 'Games', 'Competitive Games', 'Drills', 'Players', 'Career Stats']
+  const tabData   = [sessionsData, matchesData, gamesData, compData, drillsData, playersData, careerData]
 
   // Clear + write each tab
   for (let i = 0; i < tabNames.length; i++) {

@@ -147,8 +147,9 @@ Export behavior:
 - Clears and rewrites tabs on each export
 - Writes these tabs:
   - Sessions
-  - Matches
-  - Competitive Games
+  - Matches (with derived win totals and avg margin per match)
+  - Games (individual game scores, winner, duration)
+  - Competitive Games (with per-player result rows)
   - Drills
   - Players
   - Career Stats
@@ -250,8 +251,7 @@ Inside tap-pwa/src:
 
 ## Known Gaps / Next Work
 
-- Expand export to include additional derived match and competitive result analytics
-- Add automated tests for offline queue, sync retries, and route-level flows
+- Route-level integration tests (React Testing Library + Vitest) are not yet written
 
 ## License
 
