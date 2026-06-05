@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../stores/sessionStore'
 import { Icons } from '../components/ui/icons'
@@ -120,7 +120,8 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void
 
 function ActiveDashboard({ location, elapsed }: { location: string; elapsed: number }) {
   const nav = useNavigate()
-  const { clearActiveSession } = useSessionStore()
+  const [showNotesModal, setShowNotesModal] = useState(false)
+  const { clearActiveSession, notes, setNotes } = useSessionStore()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -218,7 +219,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
       {/* Floating End Session */}
       <div style={{ position: 'fixed', bottom: 18, left: 14, right: 14 }}>
         <button
-          onClick={() => { clearActiveSession(); nav('/session-recap/mock') }}
+          onClick={() => setShowNotesModal(true)}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%',
             minHeight: 54, borderRadius: 18, fontFamily: '"Archivo Expanded", Archivo, sans-serif',
@@ -229,6 +230,64 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           End Session
         </button>
       </div>
+
+      {showNotesModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 80,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'flex-end',
+          }}
+          onClick={() => setShowNotesModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', background: 'var(--panel)',
+              borderRadius: 'var(--r-lg) var(--r-lg) 0 0',
+              padding: '20px 18px 36px',
+            }}
+          >
+            <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 12 }}>
+              Session Notes — Optional
+            </p>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              maxLength={500}
+              placeholder="Anything the numbers can't capture…"
+              style={{
+                width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line-2)',
+                borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 15,
+                padding: '12px 14px', resize: 'none', height: 100, outline: 'none',
+                fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' as const,
+              }}
+            />
+            <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4, textAlign: 'right' as const }}>
+              {notes.length}/500
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowNotesModal(false)
+                clearActiveSession()
+                nav('/session-recap/mock')
+              }}
+              style={{
+                marginTop: 16, width: '100%', minHeight: 58,
+                background: 'linear-gradient(180deg, var(--orange-2), var(--orange))',
+                border: 'none', borderRadius: 'var(--r-md)', color: '#fff',
+                fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                fontWeight: 800, fontSize: 15, textTransform: 'uppercase' as const,
+                letterSpacing: '0.04em', cursor: 'pointer',
+                boxShadow: 'var(--accent-glow)',
+              }}
+            >
+              End Session
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

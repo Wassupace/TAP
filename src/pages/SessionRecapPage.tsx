@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
+import { useSessionStore } from '../stores/sessionStore'
 
 const CALLOUTS = [
   { icon: Icons.ball,   label: 'Activities',  value: '5 pickup games · 1 Banks · 100 free throws' },
@@ -11,6 +12,7 @@ const CALLOUTS = [
 
 export default function SessionRecapPage() {
   const nav = useNavigate()
+  const { notes } = useSessionStore()
 
   return (
     <div className="min-h-dvh flex flex-col">
@@ -35,6 +37,22 @@ export default function SessionRecapPage() {
       </div>
 
       <div className="absolute bottom-[18px] left-[14px] right-[14px]">
+        {notes && (
+          <div style={{
+            background: 'var(--panel)',
+            borderLeft: '3px solid var(--orange)',
+            borderRadius: 'var(--r-sm)',
+            padding: '12px 16px',
+            marginBottom: 12,
+          }}>
+            <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 6px' }}>
+              Notes
+            </p>
+            <p style={{ fontSize: 14, color: 'var(--dim)', fontStyle: 'italic', lineHeight: 1.6, margin: 0 }}>
+              "{notes}"
+            </p>
+          </div>
+        )}
         <Button variant="primary" onClick={() => nav('/')}>Done</Button>
       </div>
     </div>
