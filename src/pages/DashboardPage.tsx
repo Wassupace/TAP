@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '../stores/sessionStore'
 import { Icons } from '../components/ui/icons'
 import { Avatar } from '../components/ui/Avatar'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { StatusDot } from '../components/ui/StatusDot'
 
 const MOCK_PLAYERS = [
   { id: '1', nickname: 'JC',    color: '#FF5A1F' },
@@ -43,7 +45,7 @@ const S = {
     color: 'var(--faint)', fontWeight: 700, margin: '0 0 8px',
   } as React.CSSProperties,
   card: {
-    background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 18,
+    background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)',
   } as React.CSSProperties,
 }
 
@@ -114,7 +116,7 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: { onStart: () => void
           onClick={onStart}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexDirection: 'row',
-            width: 280, minHeight: 72, borderRadius: 22, fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+            width: 280, minHeight: 72, borderRadius: 'var(--r-lg)', fontFamily: '"Archivo Expanded", Archivo, sans-serif',
             fontWeight: 800, fontSize: 18, letterSpacing: '.02em', textTransform: 'uppercase', cursor: 'pointer',
             border: 0, color: '#0c0c0c', background: 'linear-gradient(180deg,var(--orange-2),var(--orange))',
             boxShadow: '0 12px 28px -10px rgba(255,90,31,.7)',
@@ -137,6 +139,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
   const nav = useNavigate()
   const [showNotesModal, setShowNotesModal] = useState(false)
   const { clearActiveSession, notes, setNotes } = useSessionStore()
+  const { status, pendingCount, lastSyncedAt } = useOnlineStatus()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -159,15 +162,25 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
         </div>
 
         {/* Session header card */}
-        <div className="stagger" style={{ background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 18, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div className="stagger" style={{
+          background: 'var(--hero-gradient)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 'var(--r-lg)', padding: '16px 18px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 16,
+        }}>
           <div>
-            <p style={S.eyebrow}>Active Session</p>
-            <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 19 }}>{location}</div>
+            <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>
+              Active Session
+            </p>
+            <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 19 }}>
+              {location}
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--dim)', margin: '2px 0 0' }}>
+              {fmt(elapsed)} elapsed
+            </p>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 26, fontVariantNumeric: 'tabular-nums', color: 'var(--orange-2)' }}>{fmt(elapsed)}</div>
-            <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 2, letterSpacing: '.1em' }}>ELAPSED</p>
-          </div>
+          <StatusDot status={status} pendingCount={pendingCount} lastSyncedAt={lastSyncedAt} />
         </div>
 
         {/* Action Hub — two large blocky buttons */}
@@ -176,7 +189,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           <button
             onClick={() => nav('/match/setup')}
             style={{
-              minHeight: 72, borderRadius: 22, display: 'flex', flexDirection: 'column',
+              minHeight: 72, borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center', gap: 6, border: 0, cursor: 'pointer',
               fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
               fontSize: 16, letterSpacing: '.02em', textTransform: 'uppercase',
@@ -192,7 +205,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           <button
             onClick={() => nav('/activity/setup')}
             style={{
-              minHeight: 72, borderRadius: 22, display: 'flex', flexDirection: 'column',
+              minHeight: 72, borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px solid var(--line-2)',
               cursor: 'pointer', fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800,
               fontSize: 16, letterSpacing: '.02em', textTransform: 'uppercase',
@@ -220,7 +233,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
             {MOCK_FEED.map((item, i) => {
               const cfg = FEED_CONFIG[item.type]
               return (
-                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }}>
+                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderLeft: `3px solid ${cfg.color}`, borderRadius: 'var(--r-sm)' }}>
                   <div style={{ width: 38, height: 38, minWidth: 38, borderRadius: 11, display: 'grid', placeItems: 'center', background: cfg.bg, color: cfg.color, flexShrink: 0 }}>
                     {cfg.icon}
                   </div>
@@ -242,7 +255,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
           onClick={() => setShowNotesModal(true)}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%',
-            minHeight: 54, borderRadius: 18, fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+            minHeight: 54, borderRadius: 'var(--r-md)', fontFamily: '"Archivo Expanded", Archivo, sans-serif',
             fontWeight: 800, fontSize: 14, letterSpacing: '.02em', textTransform: 'uppercase',
             cursor: 'pointer', border: '1px solid var(--line-2)', background: 'var(--panel-2)', color: 'var(--dim)',
           }}
