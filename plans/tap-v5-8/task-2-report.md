@@ -160,3 +160,90 @@ errors.
    caller's `onConfirm` handler *also* sets `isOpen` false, that's harmless
    (idempotent), but if a caller expected to control closing itself only via
    `onClose` on some other timing, this is worth a second look.
+
+---
+
+## Fix round 1: loading/error handling for `usePlayers()`
+
+### Finding addressed
+
+Important: `const { data: players = [] } = usePlayers()` collapsed "still
+loading," "query errored," and "genuinely empty roster" into the same
+`players.length === 0` branch, always rendering "No players in roster yet."
+— including during the initial fetch, which would flicker to the real list
+once data arrived. `PlayersPage.tsx` (the page this component explicitly
+mirrors) already distinguishes `isLoading`/`isError`/empty; the modal did
+not.
+
+### What changed
+
+`src/components/ui/PlayerPickerModal.tsx`:
+
+- Destructured `isLoading` and `isError` alongside `data: players = []` from
+  `usePlayers()` (previously only `data` was destructured).
+- In the player-list region, added the same three-state distinction
+  `PlayersPage.tsx` uses (lines 97–112 there), reusing that file's exact
+  copy and color conventions rather than inventing new ones:
+  - `isLoading` → centered `"Loading roster…"` text, `color: var(--faint)`
+    (verbatim copy from `PlayersPage.tsx`).
+  - `!isLoading && isError` → centered `"Could not load players. Check your
+    Supabase connection."` text, `color: var(--red)` (verbatim copy from
+    `PlayersPage.tsx`; `--red` is an existing token in `src/index.css`).
+  - `!isLoading && !isError && filtered.length === 0` → the modal's existing
+    empty-state message, unchanged (`"No players in roster yet."` vs.
+    `` `No players match "${query}".` `` depending on whether the roster
+    itself is empty or the search just has no matches).
+- Kept the modal's own visual container for these states (centered text,
+  `fontSize: 13`, `padding: '30px 0'`) rather than porting
+  `PlayersPage.tsx`'s larger dashed-border empty-state box — that box
+  includes its own "Add First Player" CTA, which is redundant here since
+  the modal already has a persistent "+ Add New Player" control pinned in
+  its footer regardless of list state. Only the loading/error/empty *copy*
+  and *distinction* were mirrored, per the instruction to match this
+  component's own conventions for the visual treatment.
+- The player row list itself (`filtered.map(...)`) was left unconditional,
+  exactly as in `PlayersPage.tsx` — during loading/error, `players` defaults
+  to `[]` so `filtered` is empty and the map naturally renders nothing.
+
+No other lines were touched. Diff is 2 lines changed (the `usePlayers()`
+destructure) plus 14 added lines (two new conditional blocks) in one file.
+
+### Tests run
+
+- `npm run build` (`tsc -b && vite build`) — clean, no errors, no new
+  warnings beyond the pre-existing chunk-size notice.
+- `npm test -- --run` (`vitest run`) — 3 test files, 21 tests, all passing
+  (unchanged from the original report; `matchesPlayerQuery` is untouched by
+  this fix and `PlayerPickerModal.tsx` has no render-test coverage in this
+  repo, per the original report's Concern #2 — this fix did not add any,
+  consistent with "keep the diff minimal and scoped to exactly this fix").
+- `npx eslint src/components/ui/PlayerPickerModal.tsx` — zero output (clean).
+- `npm run lint` (full repo) — same 5 errors + 1 warning as the original
+  report's documented pre-existing baseline
+  (`src/components/ui/StatusDot.tsx`, `src/pages/AttendancePage.tsx` ×2,
+  `src/pages/CompetitiveSetupPage.tsx`), confirming this fix introduced no
+  new lint issues. (`IOSInstallBanner.tsx`, listed in the original report's
+  baseline, no longer appears — it was evidently fixed by an unrelated
+  commit since Task 2's original implementation; not touched by this fix.)
+
+### Commands and output (abbreviated)
+
+```
+$ npm run build
+✓ built in 281ms
+
+$ npm test -- --run
+ Test Files  3 passed (3)
+      Tests  21 passed (21)
+
+$ npx eslint src/components/ui/PlayerPickerModal.tsx
+(no output — clean)
+
+$ npm run lint
+✖ 6 problems (5 errors, 1 warning)   # same pre-existing baseline, 0 new
+```
+
+### Files changed (this round)
+
+- `src/components/ui/PlayerPickerModal.tsx` (modified)
+- `plans/tap-v5-8/task-2-report.md` (this appended section)

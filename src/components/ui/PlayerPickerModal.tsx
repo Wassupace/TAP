@@ -26,7 +26,7 @@ const fieldLabel: CSSProperties = {
 }
 
 export function PlayerPickerModal({ isOpen, selectedIds, onConfirm, onClose }: PlayerPickerModalProps) {
-  const { data: players = [] } = usePlayers()
+  const { data: players = [], isLoading, isError } = usePlayers()
   const addPlayer = useAddPlayer()
 
   const [selection, setSelection] = useState<string[]>(selectedIds)
@@ -162,7 +162,19 @@ export function PlayerPickerModal({ isOpen, selectedIds, onConfirm, onClose }: P
 
         {/* Player list */}
         <div style={{ flex: 1, overflowY: 'auto', marginBottom: 14 }}>
-          {filtered.length === 0 && (
+          {isLoading && (
+            <div style={{ textAlign: 'center', color: 'var(--faint)', fontSize: 13, padding: '30px 0' }}>
+              Loading roster…
+            </div>
+          )}
+
+          {!isLoading && isError && (
+            <div style={{ textAlign: 'center', color: 'var(--red)', fontSize: 13, padding: '30px 0' }}>
+              Could not load players. Check your Supabase connection.
+            </div>
+          )}
+
+          {!isLoading && !isError && filtered.length === 0 && (
             <div style={{ textAlign: 'center', color: 'var(--faint)', fontSize: 13, padding: '30px 0' }}>
               {players.length === 0 ? 'No players in roster yet.' : `No players match "${query}".`}
             </div>
