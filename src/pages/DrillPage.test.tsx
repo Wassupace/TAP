@@ -88,11 +88,11 @@ afterEach(() => {
   container.remove()
 })
 
-// Drives the setup wizard from Step 0 through to Step 5 ("Start Drill"),
-// leaving the store's shotType/hand/selectedSpots/heatSize/makesTargetPerSpot
-// at their defaults (threePoint / right / ['center'] / 10 / 10) except where
-// a step's click intentionally sets a specific value.
-async function advanceToStartDrillStep() {
+// Drives the setup wizard from Step 0 through to Step 4 ("Players"), leaving
+// the store's shotType/hand/selectedSpots/heatSize at their defaults
+// (threePoint / right / ['center'] / 10) except where a step's click
+// intentionally sets a specific value.
+async function advanceToPlayersStep() {
   await act(async () => {
     root.render(
       <MemoryRouter>
@@ -117,7 +117,18 @@ async function advanceToStartDrillStep() {
   findButton(container, t => t === '10').click()
   await flush()
 
-  // Step 4 — players (skip-able; leave whatever the store already has)
+  // Now on Step 4 — players
+}
+
+// Continues from Step 4 through to Step 5 ("Start Drill"). Step 4's "Next →"
+// is guarded (Task 9): the caller must already have set at least one player
+// via useDrillStore.getState().setPlayers(...) before calling this, or the
+// click below will be a no-op and the assertions that follow will fail
+// against Step 4's own content instead of Step 5's.
+async function advanceToStartDrillStep() {
+  await advanceToPlayersStep()
+
+  // Step 4 — players (guarded; requires players.length > 0, see above)
   findButton(container, t => t.includes('Next')).click()
   await flush()
 
@@ -156,6 +167,7 @@ describe('DrillPage — Start Drill wiring (Task 7)', () => {
 
   it('leaves drillId null (without blocking the drill) when the insert fails', async () => {
     buildInsertChain(null, new Error('offline'))
+    useDrillStore.getState().setPlayers([PLAYER_A])
 
     await advanceToStartDrillStep()
     findButton(container, t => t.includes('Start Drill')).click()
@@ -175,6 +187,7 @@ describe('DrillPage — Start Drill wiring (Task 7)', () => {
     // eager creation and the click that consumes it.
     chain.single.mockImplementation(() => Promise.reject(new Error('network down')))
     ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
+    useDrillStore.getState().setPlayers([PLAYER_A])
 
     await advanceToStartDrillStep()
     findButton(container, t => t.includes('Start Drill')).click()
@@ -182,5 +195,33 @@ describe('DrillPage — Start Drill wiring (Task 7)', () => {
 
     expect(useDrillStore.getState().drillId).toBeNull()
     expect(container.textContent).toContain('MAKES THIS HEAT')
+  })
+})
+
+describe('DrillPage — Step 4 requires at least one player (Task 9)', () => {
+  it('does not advance past Step 4 when zero players are selected', async () => {
+    await advanceToPlayersStep()
+
+    // Sanity check: we're on Step 4 before clicking.
+    expect(container.textContent).toContain('Select Players')
+
+    findButton(container, t => t.includes('Next')).click()
+    await flush()
+
+    // Still on Step 4 — Step 5's heading never appears, and Step 4's own
+    // content (which only renders while setupStep === 4) is still present.
+    expect(container.textContent).not.toContain('Makes target per spot')
+    expect(container.textContent).toContain('Select Players')
+  })
+
+  it('advances to Step 5 when one or more players are selected', async () => {
+    useDrillStore.getState().setPlayers([PLAYER_A])
+
+    await advanceToPlayersStep()
+
+    findButton(container, t => t.includes('Next')).click()
+    await flush()
+
+    expect(container.textContent).toContain('Makes target per spot')
   })
 })

@@ -271,7 +271,11 @@ export default function DrillPage() {
                 {players.length > 0 ? 'Change Players' : 'Select Players'}
               </button>
 
-              <Button variant="primary" className="w-full !min-h-[54px]" onClick={() => setSetupStep(5)}>
+              <Button
+                variant="primary"
+                className="w-full !min-h-[54px]"
+                onClick={() => { if (players.length > 0) setSetupStep(5) }}
+              >
                 Next →
               </Button>
             </div>
