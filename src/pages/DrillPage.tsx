@@ -6,6 +6,7 @@ import { Icons } from '../components/ui/icons'
 import { useDrillStore } from '../stores/drillStore'
 import { usePlayers } from '../hooks/usePlayers'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
+import { NumberPad } from '../components/ui/NumberPad'
 import { playerColor } from '../utils/playerColor'
 
 import { type ShotSpot, SPOT_LABELS, SHOT_SPOTS, ALL_SHOT_TYPES } from '../types'
@@ -32,6 +33,7 @@ export default function DrillPage() {
   const [setupStep, setSetupStep] = useState<number | null>(0)
   const [toastVisible, setToastVisible] = useState(false)
   const [playerPickerOpen, setPlayerPickerOpen] = useState(false)
+  const [numberPadOpen, setNumberPadOpen] = useState(false)
 
   const activeSpot = selectedSpots[currentSpotIndex] as ShotSpot | undefined
   const activePlayer = players[currentPlayerIndex]
@@ -384,7 +386,14 @@ export default function DrillPage() {
               style={{ background: 'var(--panel-3)', borderColor: 'var(--line-2)' }}
             >−</button>
             <div>
-              <span className="font-display text-[64px] leading-[.9]">{currentMakes}</span>
+              <button
+                type="button"
+                onClick={() => setNumberPadOpen(true)}
+                className="font-display text-[64px] leading-[.9] bg-transparent border-0 p-0 cursor-pointer"
+                style={{ color: 'inherit' }}
+              >
+                {currentMakes}
+              </button>
               <span className="font-display text-[30px] text-[var(--faint)]">/{heatSize}</span>
             </div>
             <button
@@ -491,6 +500,14 @@ export default function DrillPage() {
           End Drill
         </Button>
       </div>
+
+      <NumberPad
+        isOpen={numberPadOpen}
+        value={currentMakes}
+        label="Makes this heat"
+        onConfirm={setMakes}
+        onClose={() => setNumberPadOpen(false)}
+      />
     </div>
   )
 }

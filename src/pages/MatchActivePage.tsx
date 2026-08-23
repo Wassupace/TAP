@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
+import { NumberPad } from '../components/ui/NumberPad'
 import { useMatchStore } from '../stores/matchStore'
 
 function fmtSec(s: number) {
@@ -10,7 +11,9 @@ function fmtSec(s: number) {
 
 export default function MatchActivePage() {
   const nav = useNavigate()
-  const { targetScore, currentAScore, currentBScore, isTimerRunning, timerSeconds, completedGames, incrementScore, startTimer, stopTimer, tickTimer, endGame, undoLastGame } = useMatchStore()
+  const { targetScore, currentAScore, currentBScore, isTimerRunning, timerSeconds, completedGames, incrementScore, setScore, startTimer, stopTimer, tickTimer, endGame, undoLastGame } = useMatchStore()
+
+  const [numberPadTeam, setNumberPadTeam] = useState<'A' | 'B' | null>(null)
 
   const canUndo = completedGames.length > 0 && !isTimerRunning
 
@@ -40,7 +43,14 @@ export default function MatchActivePage() {
           {/* Team A */}
           <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,.33)', borderRadius: 'var(--r-lg)' }}>
             <div className="text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--blue)' }}>Team A</div>
-            <div className="font-display text-[62px] leading-none mb-1.5 text-chalk" id="scoreA">{currentAScore}</div>
+            <button
+              type="button"
+              onClick={() => setNumberPadTeam('A')}
+              className="font-display text-[62px] leading-none mb-1.5 text-chalk bg-transparent border-0 p-0 w-full cursor-pointer"
+              id="scoreA"
+            >
+              {currentAScore}
+            </button>
             <div className="flex gap-1.5">
               <button onClick={() => incrementScore('A', 1)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-white" style={{ background: 'var(--blue)', borderRadius: 'var(--r-sm)' }}>+1</button>
               <button onClick={() => incrementScore('A', 2)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-chalk" style={{ background: 'rgba(255,255,255,.1)', borderRadius: 'var(--r-sm)' }}>+2</button>
@@ -49,7 +59,14 @@ export default function MatchActivePage() {
           {/* Team B */}
           <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,.33)', borderRadius: 'var(--r-lg)' }}>
             <div className="text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--red)' }}>Team B</div>
-            <div className="font-display text-[62px] leading-none mb-1.5 text-chalk" id="scoreB">{currentBScore}</div>
+            <button
+              type="button"
+              onClick={() => setNumberPadTeam('B')}
+              className="font-display text-[62px] leading-none mb-1.5 text-chalk bg-transparent border-0 p-0 w-full cursor-pointer"
+              id="scoreB"
+            >
+              {currentBScore}
+            </button>
             <div className="flex gap-1.5">
               <button onClick={() => incrementScore('B', 1)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-white" style={{ background: 'var(--red)', borderRadius: 'var(--r-sm)' }}>+1</button>
               <button onClick={() => incrementScore('B', 2)} className="flex-1 border-0 font-bold py-[11px] cursor-pointer text-[15px] text-chalk" style={{ background: 'rgba(255,255,255,.1)', borderRadius: 'var(--r-sm)' }}>+2</button>
@@ -125,6 +142,14 @@ export default function MatchActivePage() {
           End Match
         </Button>
       </div>
+
+      <NumberPad
+        isOpen={numberPadTeam !== null}
+        value={numberPadTeam === 'B' ? currentBScore : currentAScore}
+        label={numberPadTeam === 'B' ? 'Team B score' : 'Team A score'}
+        onConfirm={(v) => { if (numberPadTeam) setScore(numberPadTeam, v) }}
+        onClose={() => setNumberPadTeam(null)}
+      />
     </div>
   )
 }

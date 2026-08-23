@@ -34,6 +34,7 @@ interface MatchStore {
   randomize: (pool: Player[]) => void
   movePlayer: (playerId: string, to: 'A' | 'B' | 'sub') => void
   incrementScore: (team: 'A' | 'B', pts: number) => void
+  setScore: (team: 'A' | 'B', value: number) => void
   startTimer: () => void
   stopTimer: () => number
   tickTimer: () => void
@@ -88,6 +89,12 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   incrementScore: (team, pts) => {
     if (team === 'A') set(s => ({ currentAScore: s.currentAScore + pts }))
     else set(s => ({ currentBScore: s.currentBScore + pts }))
+  },
+
+  setScore: (team, value) => {
+    const clamped = Math.max(0, value)
+    if (team === 'A') set({ currentAScore: clamped })
+    else set({ currentBScore: clamped })
   },
 
   startTimer: () => set({ gameTimerStart: Date.now(), isTimerRunning: true }),
