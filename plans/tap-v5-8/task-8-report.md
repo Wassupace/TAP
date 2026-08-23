@@ -218,3 +218,139 @@ of which I touched or included in my commit.)
   hex. Practically similar user-facing risk (light mode is the more
   exposed case, as the brief says), just a different mechanism than
   described.
+
+---
+
+## Follow-up: coordinator lifted the `src/index.css` constraint (RESOLVED)
+
+The coordinator reviewed this report and ruled in favor of Recommendation
+(1): approved a scope-lifting exception to add a single `@config` at-rule
+to `src/index.css`, explicitly limited to that one line — no color values,
+no theme-sync mechanism, nothing else in that file changes (Task 6's
+already-reviewed work stays untouched). Everything else about the original
+brief stands, including the `var(--*)` mapping already committed in
+`01919f9`.
+
+### What I added
+
+```css
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Archivo:...');
+@config "../tailwind.config.ts";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+One line, placed after the existing Google Fonts `@import` and before the
+`@tailwind` directives. Confirmed via `node_modules/tailwindcss/dist/lib.js`
+that `@config` (a) must be top-level/non-nested and (b) cannot have a body
+— both satisfied here. I found no additional ordering requirement relative
+to `@tailwind`/`@import` in the compiled source beyond that, so I placed it
+at the conventional position (top of file, before the utilities are
+generated) and verified empirically that it takes effect — see below.
+
+### Verification (same method as before: build, then byte/rule diff)
+
+`npm run build`, then a structural rule-set diff between the previous
+build (var() mapping committed, `@config` not yet added — saved at
+`/tmp/dist-withvar`) and the new build (`/tmp/dist-wired`):
+
+- **0 rules removed**
+- **10 rules added**, including every target utility from the brief that
+  is actually used in the source tree:
+  - `.text-chalk{color:var(--chalk)}`
+  - `.bg-panel{background-color:var(--panel)}`
+  - `.border-orange{border-color:var(--orange)}`
+  - `.text-teamA{color:var(--blue)}` — confirms the teamA→`--blue` rename
+    resolves correctly
+  - `.bg-warn{background-color:var(--yellow)}` — confirms warn→`--yellow`
+  - `.text-dim{color:var(--dim)}`
+  - `.bg-hit{background-color:var(--green)}` — confirms hit→`--green`
+
+  This is the exact `.text-chalk{color:var(--chalk)}`-shaped rule the
+  task's verification step asked for, now actually present in the build
+  output — not a baked-in hex, not a missing rule.
+
+  (`panel-2`, `panel-3`, `faint`, `orange-2`, `teamB` didn't show up as
+  separate rules only because no source file currently uses those exact
+  utility class names — confirmed by grep. Nothing wrong; they'll generate
+  correctly the moment something uses e.g. `bg-panel-2`.)
+
+- Grepped the built CSS for every old hardcoded hex from the original
+  stale palette (`#F9FAFB`, `#1F2937`, `#FF5A1F`, etc.) — none present.
+  The hex values that do still appear in the file (`#3B82F6`, `#EF4444`,
+  `#10B981`, `#F59E0B`) are the `--blue`/`--red`/`--green`/`--yellow`
+  **custom property definitions themselves** inside
+  `:root[data-theme="light"|"dark"]` in `src/index.css` — i.e., Task 6's
+  actual theme values, unrelated to and unchanged by this fix. The
+  generated utility rules reference them via `var(--*)`, never a literal.
+
+- **Side effects noticed, checked, and confirmed harmless**: wiring
+  `@config` also activates the `fontFamily` and `borderRadius` extensions
+  that were already sitting unused in `tailwind.config.ts` (not something
+  I added — pre-existing in the file before this task started):
+  - `borderRadius.lg/md/sm` (16px/12px/8px): grepped all of `src/**/*.tsx`
+    for `rounded-lg`/`rounded-md`/`rounded-sm` — **zero usages** anywhere
+    in the codebase (components use arbitrary values like `rounded-[14px]`
+    instead), and confirmed no such rule appears in the built CSS before
+    or after this change. No visual impact.
+  - `fontFamily.display`/`heading`: activates new
+    `.font-display{font-family:Anton,sans-serif}` and
+    `.font-heading{font-family:Archivo Expanded,Archivo,sans-serif}`
+    utility rules — but `src/index.css` already hand-defines
+    `.font-display`/`.font-heading` with the same selector plus an
+    explicit `font-weight`, later in the same file. Checked the actual
+    byte offsets in the built CSS: the hand-written rules land *after* the
+    Tailwind-generated ones (10921/10980 vs 5875/5918), so by standard CSS
+    cascade (equal specificity, later wins) the hand-written font-weight
+    still applies. Confirmed no visual regression — this is now a ~90-byte
+    redundant-but-inert duplicate rule pair, not a functional change.
+  - The one previously-noted `.flex-shrink{flex-shrink:1}` rule that
+    flipped presence between builds in the original report reappeared
+    here too, in both the "before" and "after" comparison sets at
+    different times across repeated builds — confirmed non-deterministic
+    build-to-build noise from Tailwind's content scanner, unrelated to
+    colors or this change, and harmless (it's a plain default-value
+    utility, not something config-dependent).
+
+### Commands run (this round)
+
+- `npm run build` — clean.
+- `npm test` — 65/65 passing (10 files), unchanged.
+- `npm run lint` — same 5 pre-existing errors / 1 warning as both prior
+  rounds, all in files untouched by this task.
+
+### Files changed (this round)
+
+- `src/index.css` — single line added (`@config "../tailwind.config.ts";`).
+  Confirmed via `git diff` this is the *only* line changed in the file.
+
+### Commit
+
+`92dcf06` — `fix: wire tailwind.config.ts into the build via @config`
+(separate from `01919f9` and `c9a5e48`, not an amend, per instruction).
+
+### Status: DONE
+
+The task's original acceptance criterion — Tailwind utility classes for
+these tokens following the active theme, verified in the actual built CSS
+rather than assumed — is now met. Combined with `01919f9`'s correct
+`var(--*)` mapping, `text-chalk`/`bg-panel`/`border-orange`/etc. now
+resolve to the live theme tokens, in both light and dark mode, system-wide,
+via this one file.
+
+### Residual concerns
+
+- The `@config` line is a one-token addition to a file this task was
+  originally told not to touch. The change is minimal and additive
+  (verified via `git diff` to be the only line changed), and was
+  explicitly approved by the coordinator — flagging only so the scope
+  exception is visible to anyone reading history later, not as an
+  open risk.
+- The now-activated (but pre-existing, not added by me) `fontFamily`/
+  `borderRadius` extensions in `tailwind.config.ts` are currently inert or
+  shadowed, as detailed above, but are worth a mention to whoever next
+  edits `src/index.css`'s hand-written `.font-display`/`.font-heading`
+  rules or adds a `rounded-lg`/`rounded-md`/`rounded-sm` class somewhere —
+  the config's values (16px/12px/8px, and the two font stacks) will now
+  actually take effect where they didn't before.
