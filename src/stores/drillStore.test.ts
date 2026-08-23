@@ -133,6 +133,68 @@ describe('drillStore — setCurrentPlayerIndex (manual shooter override)', () =>
   })
 })
 
+describe('drillStore — stale currentPlayerIndex after re-selecting a smaller roster (task-3 review Finding 1)', () => {
+  // Repro from the review: start a 3-player drill, commit a heat so
+  // currentPlayerIndex advances off 0, then go back through setup and select
+  // a smaller roster. setPlayers() alone does not reset currentPlayerIndex —
+  // that's by design (see brief: "no store change needed"), so the fix lives
+  // in DrillPage.tsx's onConfirm handler, which must call
+  // setCurrentPlayerIndex(0) right after setPlayers(). These tests pin down
+  // both halves: that the stale index really does reproduce the historical
+  // playerId: '' bug, and that setCurrentPlayerIndex(0) is what fixes it.
+  const PLAYER_C: Player = {
+    id: 'player-c-uuid',
+    name: 'Carlos Cruz',
+    nickname: 'CC',
+    target_ft_percent: 0.75,
+    target_mid_percent: 0.5,
+    target_3pt_percent: 0.4,
+    created_at: '2026-01-01T00:00:00Z',
+  }
+
+  it('reproduces the bug: setPlayers() alone leaves a stale index pointing past the new roster', () => {
+    buildChain()
+    useDrillStore.getState().setPlayers([PLAYER_A, PLAYER_B, PLAYER_C])
+
+    useDrillStore.getState().setMakes(1)
+    useDrillStore.getState().commitHeat() // index 0 -> 1 (round robin, 3 players)
+    expect(useDrillStore.getState().currentPlayerIndex).toBe(1)
+
+    // Simulate re-entering setup and selecting only one player, without
+    // resetting currentPlayerIndex — this is what a caller that forgets
+    // setCurrentPlayerIndex(0) looks like.
+    useDrillStore.getState().setPlayers([PLAYER_A])
+
+    const { players, currentPlayerIndex } = useDrillStore.getState()
+    expect(players[currentPlayerIndex]).toBeUndefined() // stale index, exactly the review's repro
+
+    useDrillStore.getState().setMakes(1)
+    useDrillStore.getState().commitHeat()
+    const last = useDrillStore.getState().completedHeats.at(-1)
+    expect(last?.playerId).toBe('') // the exact bug Task 3 was supposed to eliminate
+  })
+
+  it('fix: calling setCurrentPlayerIndex(0) right after setPlayers() (as DrillPage.tsx onConfirm now does) avoids it', () => {
+    buildChain()
+    useDrillStore.getState().setPlayers([PLAYER_A, PLAYER_B, PLAYER_C])
+
+    useDrillStore.getState().setMakes(1)
+    useDrillStore.getState().commitHeat()
+    expect(useDrillStore.getState().currentPlayerIndex).toBe(1)
+
+    useDrillStore.getState().setPlayers([PLAYER_A])
+    useDrillStore.getState().setCurrentPlayerIndex(0)
+
+    const { players, currentPlayerIndex } = useDrillStore.getState()
+    expect(players[currentPlayerIndex]).toEqual(PLAYER_A)
+
+    useDrillStore.getState().setMakes(1)
+    useDrillStore.getState().commitHeat()
+    const last = useDrillStore.getState().completedHeats.at(-1)
+    expect(last?.playerId).toBe(PLAYER_A.id)
+  })
+})
+
 describe('drillStore — solo drill (no players selected)', () => {
   it('still commits heats when players is empty, without being blocked', () => {
     buildChain()

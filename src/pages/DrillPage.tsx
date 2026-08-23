@@ -27,7 +27,7 @@ export default function DrillPage() {
     reset,
   } = useDrillStore()
 
-  const { data: allPlayers = [] } = usePlayers()
+  const { data: allPlayers = [], refetch: refetchPlayers } = usePlayers()
 
   const [setupStep, setSetupStep] = useState<number | null>(0)
   const [toastVisible, setToastVisible] = useState(false)
@@ -303,7 +303,25 @@ export default function DrillPage() {
           selectedIds={players.map(p => p.id)}
           onConfirm={(ids) => {
             const resolved = allPlayers.filter(p => ids.includes(p.id))
-            setPlayers(resolved)
+            if (resolved.length === ids.length) {
+              // Every selected id (including any just-created player) is
+              // already present in allPlayers — resolve immediately.
+              setPlayers(resolved)
+              setCurrentPlayerIndex(0)
+              return
+            }
+            // A selected id (the just-created player, most likely) isn't in
+            // allPlayers yet — useAddPlayer's onSuccess only kicks off an
+            // invalidation, it doesn't await the refetch, so tapping Confirm
+            // right after adding a new player can race ahead of it. Refetch
+            // explicitly and resolve against the fresh result instead of
+            // calling setPlayers with an incomplete list that would silently
+            // drop the new player (task-3 review Finding 2).
+            refetchPlayers().then(({ data }) => {
+              const freshResolved = (data ?? []).filter(p => ids.includes(p.id))
+              setPlayers(freshResolved)
+              setCurrentPlayerIndex(0)
+            })
           }}
           onClose={() => setPlayerPickerOpen(false)}
         />

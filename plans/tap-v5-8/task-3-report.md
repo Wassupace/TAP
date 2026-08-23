@@ -183,3 +183,134 @@ project skill going forward.
   available in this sandbox. This was explicitly called out as
   non-blocking in the task instructions; the automated regression test
   stands as the required verification.
+
+---
+
+## Fix round 1 — review findings addressed
+
+Two review findings on the above implementation were fixed. This is an
+append to the original report; the original implementer's process was not
+resumable, so this fix was done fresh against the code as it stood.
+
+### Finding 1 (Critical): stale `currentPlayerIndex` reintroduces the exact bug
+
+**Root cause confirmed**: `setPlayers` (`src/stores/drillStore.ts`) never
+touched `currentPlayerIndex`, and `DrillPage.tsx`'s `PlayerPickerModal`
+`onConfirm` handler called `setPlayers(resolved)` without resetting it. If a
+player's index into a previous, larger roster was left over (e.g. from a
+partially-run drill navigated away from without hitting the step-0 `reset()`
+path) and the new roster was smaller, `players[currentPlayerIndex]` became
+`undefined` again — reproducing the original `playerId: ''` bug.
+
+**Fix**: in `src/pages/DrillPage.tsx`'s `onConfirm` handler, `setCurrentPlayerIndex(0)`
+is now called immediately after every `setPlayers(...)` call (both the
+immediate-resolve path and the deferred/refetch path added for Finding 2
+below — see the diff). No changes were made to `drillStore.ts` — exactly as
+the brief for this finding specified, the action already existed and needed
+no store-side change.
+
+### Finding 2 (Important): newly-created player could be silently dropped
+
+**Root cause confirmed**: `PlayerPickerModal.handleSaveNewPlayer` adds the
+new player's id to local `selection`, but `useAddPlayer`'s `onSuccess` only
+calls `qc.invalidateQueries({ queryKey: ['players'] })` — it doesn't await
+the refetch. If the user taps Confirm before that refetch lands,
+`DrillPage.tsx`'s `allPlayers.filter(p => ids.includes(p.id))` runs against
+stale data missing the new player, and that id is silently dropped from what
+`setPlayers` receives.
+
+**Fix — chosen approach and why**: the brief suggested either a small
+effect/retry loop or "don't act until `usePlayers()` data contains all the
+ids," and explicitly said to use judgment if a cleaner approach existed. My
+first attempt used a `pendingPlayerIds` state + a `useEffect` that re-checked
+`allPlayers` on every change and called `setPlayers`/`setCurrentPlayerIndex`
+once fully resolved. That approach **failed lint**: this repo's
+`eslint-plugin-react-hooks` v7 config enables `react-hooks/set-state-in-effect`,
+which flags any synchronous `setState` call in an effect body (confirmed
+empirically — same rule the original implementer hit when trying to
+auto-open the picker via an effect). Since `DrillPage.tsx` is a file this fix
+touches, that's not covered by the "5 pre-existing lint errors" exemption.
+
+Instead, the mismatch is now resolved **inside the `onConfirm` event handler
+itself** — no new component state, no effect:
+
+```tsx
+onConfirm={(ids) => {
+  const resolved = allPlayers.filter(p => ids.includes(p.id))
+  if (resolved.length === ids.length) {
+    setPlayers(resolved)
+    setCurrentPlayerIndex(0)
+    return
+  }
+  // Race: a selected id (the just-created player) isn't in allPlayers yet.
+  // Refetch explicitly and resolve against the fresh result instead of
+  // silently dropping it.
+  refetchPlayers().then(({ data }) => {
+    const freshResolved = (data ?? []).filter(p => ids.includes(p.id))
+    setPlayers(freshResolved)
+    setCurrentPlayerIndex(0)
+  })
+}}
+```
+
+`refetch` is now destructured from the existing `usePlayers()` call
+(`const { data: allPlayers = [], refetch: refetchPlayers } = usePlayers()`).
+This is a user-gesture-triggered refetch (a direct reaction to the Confirm
+tap), not a derived-state effect, so it doesn't trip the lint rule and needed
+no new state. `useAddPlayer`/`usePlayers.ts` were left untouched, per the
+brief's preference for the narrower DrillPage.tsx-only fix — react-query's
+`refetch()` was sufficient without changing the mutation's `onSuccess`.
+
+### Test coverage added
+
+`src/stores/drillStore.test.ts` gained a new `describe` block covering
+Finding 1's exact repro at the store level (the store-side half of the fix —
+the UI-layer half, `DrillPage.tsx`'s `onConfirm`, can't be exercised without
+a component-rendering test library, per the existing project constraint):
+
+1. **Reproduces the bug**: 3 players, one `commitHeat()` (index advances to
+   1), then `setPlayers([PLAYER_A])` alone (no index reset) — asserts
+   `players[currentPlayerIndex]` is `undefined` and that a subsequent
+   `commitHeat()` writes `playerId: ''`, exactly the historical bug.
+2. **Confirms the fix ingredient**: same setup, but followed by
+   `setCurrentPlayerIndex(0)` (mirroring what `DrillPage.tsx`'s `onConfirm`
+   now does) — asserts `players[currentPlayerIndex]` resolves to the right
+   player and `commitHeat()` writes the real id.
+
+Finding 2's race condition (query-refetch timing) was judged not worth a new
+test: it's inherently async/timing-dependent, the fix is a small,
+directly-readable `if/else` in a UI event handler with no new store logic,
+and simulating react-query's refetch timing would require new mocking
+infrastructure disproportionate to a one-branch integration fix — consistent
+with the task's "don't over-engineer test infrastructure for a UI
+integration fix" guidance.
+
+### Verification
+
+- `npm run build` — clean.
+- `npm test` — **29/29 passing** (4 test files; 2 new tests added to
+  `drillStore.test.ts`, no existing tests changed).
+- `npm run lint` — **6 problems (5 errors, 1 warning)**, identical set to
+  the pre-existing baseline (`IOSInstallBanner.tsx`, `StatusDot.tsx`,
+  `AttendancePage.tsx`, `CompetitiveSetupPage.tsx`). `DrillPage.tsx` and
+  `drillStore.test.ts` are lint-clean. (Confirmed empirically that my first
+  `useEffect`-based attempt at Finding 2 added a 7th, new-file error before
+  being replaced with the refetch-in-handler approach above.)
+
+### Files changed (this fix round)
+
+- `src/pages/DrillPage.tsx` — `onConfirm` handler now resets
+  `currentPlayerIndex` to 0 after every `setPlayers` call, and defers/retries
+  resolution via an explicit `refetch()` when the picker's selected ids don't
+  fully resolve against the current `usePlayers()` cache.
+- `src/stores/drillStore.test.ts` — added a regression test pair for the
+  stale-index scenario.
+
+### Concerns
+
+- None. Both findings are fixed at their narrowest correct scope; no store
+  logic, `useAddPlayer`, or `usePlayers.ts` changes were needed.
+- The three deferred Minor findings (Avatar `variant="active"` no-op,
+  roster-alphabetical vs. tap-order selection, hardcoded font-family at
+  DrillPage.tsx:236) and the separate `setDrillId`-never-called issue (Task 7)
+  were left untouched, per the fix-round scope.
