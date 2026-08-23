@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
 import { initSyncWorker } from './lib/syncWorker'
+import { initThemeSync } from './lib/themeSync'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,6 +14,7 @@ const queryClient = new QueryClient({
 })
 
 initSyncWorker()
+initThemeSync()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

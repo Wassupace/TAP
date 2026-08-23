@@ -2,10 +2,19 @@ import { useNavigate } from 'react-router-dom'
 import { BackButton } from '../components/ui/Button'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { StatusDot } from '../components/ui/StatusDot'
+import { useThemeStore, THEME_PREFERENCES, type ThemePreference } from '../stores/themeStore'
+
+const THEME_LABELS: Record<ThemePreference, string> = {
+  light: 'Light',
+  dark: 'Dark',
+  system: 'System',
+}
 
 export default function SettingsPage() {
   const nav = useNavigate()
   const { status, pendingCount, lastSyncedAt } = useOnlineStatus()
+  const preference = useThemeStore(s => s.preference)
+  const setPreference = useThemeStore(s => s.setPreference)
 
   const row = (
     label: string,
@@ -50,6 +59,38 @@ export default function SettingsPage() {
           Settings
         </div>
         <p style={{ fontSize: 12, color: 'var(--dim)', margin: '2px 0 0' }}>v1.0 — PRD v5.4</p>
+      </div>
+
+      {/* Appearance */}
+      <p style={{ fontSize: 10, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 4 }}>
+        Appearance
+      </p>
+      <div style={{ background: 'var(--panel)', borderRadius: 'var(--r-md)', padding: '13px 16px', marginBottom: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--chalk)' }}>Theme</div>
+        <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2, marginBottom: 12 }}>
+          Light, dark, or match your device
+        </div>
+        <div style={{ display: 'flex', gap: 8 }} role="radiogroup" aria-label="Theme">
+          {THEME_PREFERENCES.map(option => (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={preference === option}
+              onClick={() => setPreference(option)}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 'var(--r-sm)',
+                fontSize: 13, fontWeight: 700,
+                background: preference === option ? 'var(--orange)' : 'var(--panel-2)',
+                color: preference === option ? '#fff' : 'var(--dim)',
+                border: preference === option ? '1px solid var(--orange)' : '1px solid var(--line)',
+                cursor: 'pointer',
+              }}
+            >
+              {THEME_LABELS[option]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Data & Export */}

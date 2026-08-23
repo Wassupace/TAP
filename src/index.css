@@ -3,21 +3,57 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---- Sport Card — dark mode (default) ---- */
-:root {
-  --ink:       #111827;
-  --court:     #111827;
-  --panel:     #1F2937;
-  --panel-2:   #374151;
-  --panel-3:   #4B5563;
+/* ---- Sport Card — theme tokens ----
+   Theme is controlled by document.documentElement.dataset.theme, kept in
+   sync with the user's preference (light/dark/system) by
+   src/lib/themeSync.ts. See src/stores/themeStore.ts for the preference
+   store. PRD v5.8 §1.4 exact palette. */
+:root[data-theme="light"] {
+  --ink:       #FFFFFF;
+  --court:     #FFFFFF;
+  --panel:     #F5F5F5;
+  --panel-2:   #FBFBFB;
+  --panel-3:   #F2F2F2;
+  --line:      rgba(0,0,0,.06);
+  --line-2:    rgba(0,0,0,.10);
+  --chalk:     #1A1A2E;
+  --dim:       #666666;
+  --faint:     #969696;
+  --orange:    #E8500A;
+  --orange-2:  #F66E2F;
+  --orange-soft: rgba(232,80,10,.14);
+  --blue:      #3B82F6;
+  --blue-soft: rgba(59,130,246,.16);
+  --red:       #EF4444;
+  --red-soft:  rgba(239,68,68,.16);
+  --green:     #10B981;
+  --yellow:    #F59E0B;
+  --grey-z:    rgba(107,114,128,.15);
+
+  /* Sport Card extras */
+  --hero-gradient: linear-gradient(135deg, #F7F7F7 0%, #F5F5F5 100%);
+  --accent-glow:   0 4px 14px rgba(232,80,10,.25);
+
+  --r-lg: 16px;
+  --r-md: 12px;
+  --r-sm: 8px;
+  --shadow: 0 4px 16px rgba(0,0,0,.10);
+}
+
+:root[data-theme="dark"] {
+  --ink:       #0F0F14;
+  --court:     #0F0F14;
+  --panel:     #1A1A2E;
+  --panel-2:   #272745;
+  --panel-3:   #34345C;
   --line:      rgba(255,255,255,.06);
   --line-2:    rgba(255,255,255,.10);
-  --chalk:     #F9FAFB;
-  --dim:       #9CA3AF;
-  --faint:     #6B7280;
-  --orange:    #FF5A1F;
-  --orange-2:  #FF7C40;
-  --orange-soft: rgba(255,90,31,.14);
+  --chalk:     #FFFFFF;
+  --dim:       #E8E4D9;
+  --faint:     #C4BA9D;
+  --orange:    #E8500A;
+  --orange-2:  #F66E2F;
+  --orange-soft: rgba(232,80,10,.14);
   --blue:      #3B82F6;
   --blue-soft: rgba(59,130,246,.16);
   --red:       #EF4444;
@@ -27,32 +63,13 @@
   --grey-z:    rgba(156,163,175,.20);
 
   /* Sport Card extras */
-  --hero-gradient: linear-gradient(135deg, #1e3a5f 0%, #111827 100%);
-  --accent-glow:   0 4px 14px rgba(255,90,31,.25);
+  --hero-gradient: linear-gradient(135deg, #21213B 0%, #0F0F14 100%);
+  --accent-glow:   0 4px 14px rgba(232,80,10,.25);
 
   --r-lg: 16px;
   --r-md: 12px;
   --r-sm: 8px;
   --shadow: 0 18px 50px -12px rgba(0,0,0,.5);
-}
-
-/* ---- Light mode override ---- */
-@media (prefers-color-scheme: light) {
-  :root {
-    --ink:    #F3F4F6;
-    --court:  #F3F4F6;
-    --panel:  #FFFFFF;
-    --panel-2: #F9FAFB;
-    --panel-3: #E5E7EB;
-    --line:   rgba(0,0,0,.06);
-    --line-2: rgba(0,0,0,.10);
-    --chalk:  #111827;
-    --dim:    #6B7280;
-    --faint:  #9CA3AF;
-    --hero-gradient: linear-gradient(135deg, #DBEAFE 0%, #F3F4F6 100%);
-    --shadow: 0 4px 16px rgba(0,0,0,.10);
-    --grey-z: rgba(107,114,128,.15);
-  }
 }
 
 * {
