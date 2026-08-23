@@ -4,10 +4,12 @@ import { Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { Icons } from '../components/ui/icons'
 import { useDrillStore } from '../stores/drillStore'
+import { useSessionStore } from '../stores/sessionStore'
 import { usePlayers } from '../hooks/usePlayers'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { NumberPad } from '../components/ui/NumberPad'
 import { playerColor } from '../utils/playerColor'
+import { supabase } from '../lib/supabase'
 
 import { type ShotSpot, SPOT_LABELS, SHOT_SPOTS, ALL_SHOT_TYPES } from '../types'
 
@@ -26,7 +28,9 @@ export default function DrillPage() {
     commitHeat,
     undoLastHeat,
     reset,
+    setDrillId,
   } = useDrillStore()
+  const { activeSessionId } = useSessionStore()
 
   const { data: allPlayers = [], refetch: refetchPlayers } = usePlayers()
 
@@ -40,6 +44,29 @@ export default function DrillPage() {
 
   const changeMakes = (delta: number) => {
     setMakes(currentMakes + delta)
+  }
+
+  const handleStart = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('drills')
+        .insert({
+          session_id: activeSessionId,
+          shot_type: shotType,
+          hand,
+          selected_spots: selectedSpots,
+          heat_size: heatSize,
+          makes_target_per_spot: makesTargetPerSpot,
+          player_ids: players.map(p => p.id),
+          started_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+      if (!error && data) setDrillId(data.id)
+    } catch {
+      // Offline — drillId stays null, heats will be queued without drill FK
+    }
+    setSetupStep(null)
   }
 
   const saveHeat = () => {
@@ -293,7 +320,7 @@ export default function DrillPage() {
                   None
                 </button>
               </div>
-              <Button variant="primary" className="w-full !min-h-[54px]" onClick={() => setSetupStep(null)}>
+              <Button variant="primary" className="w-full !min-h-[54px]" onClick={handleStart}>
                 Start Drill
               </Button>
             </div>
