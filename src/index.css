@@ -7,13 +7,19 @@
    Theme is controlled by document.documentElement.dataset.theme, kept in
    sync with the user's preference (light/dark/system) by
    src/lib/themeSync.ts. See src/stores/themeStore.ts for the preference
-   store. PRD v5.8 §1.4 exact palette. */
+   store. PRD v5.8 §1.4 exact palette.
+
+   These tokens intentionally have NO bare :root fallback — only
+   [data-theme="light"|"dark"]. index.html sets data-theme synchronously via
+   an inline bootstrap script before this stylesheet is applied, so there is
+   no "no attribute yet" paint. Do not reintroduce a bare :root block without
+   also removing/adjusting that script. */
 :root[data-theme="light"] {
   --ink:       #FFFFFF;
   --court:     #FFFFFF;
   --panel:     #F5F5F5;
-  --panel-2:   #FBFBFB;
-  --panel-3:   #F2F2F2;
+  --panel-2:   #F1F1F1;
+  --panel-3:   #E8E8E8;
   --line:      rgba(0,0,0,.06);
   --line-2:    rgba(0,0,0,.10);
   --chalk:     #1A1A2E;

@@ -192,3 +192,135 @@ already used for hand-selection in `DrillPage.tsx`. This resolves the PRD's
   for whoever picks up the Phase 2 shot-chart work.
 - No new npm dependencies were added; `zustand/middleware` ships inside the
   already-installed `zustand@^5.0.14`.
+
+---
+
+## Fix Round 1: Cold-load flash + light-mode panel ladder
+
+Two review findings addressed.
+
+### Finding 1 — cold-load white flash for dark-mode users
+
+Confirmed the root cause: `src/index.css`'s color tokens live only under
+`[data-theme="light"]`/`[data-theme="dark"]` (no bare `:root` fallback), but
+`document.documentElement.dataset.theme` wasn't set until `main.tsx`'s
+`initThemeSync()` ran — which happens after the browser has already parsed
+`index.html` and is ready to paint with the stylesheet applied, since
+`<script type="module">` is deferred by spec. At that first paint,
+`var(--ink)`/`var(--chalk)` etc. were invalid at computed-value time, so
+`body` fell back to its initial (transparent/white) background with black
+text before flipping to the real theme once React's module graph executed.
+
+**Fix**: added a plain inline `<script>` (non-module, no build-step
+dependency) in `index.html`'s `<head>`, placed immediately after the
+`<meta charset>` tag — i.e. before every other `<head>` element in source,
+and confirmed via `npm run build` to land in the emitted `dist/index.html`
+before both the injected `<script type="module" src=".../index-*.js">` and
+`<link rel="stylesheet" href=".../index-*.css">` tags. It:
+
+1. Reads `localStorage.getItem('tap-theme')` — confirmed against
+   `src/stores/themeStore.ts` (`THEME_STORAGE_KEY = 'tap-theme'`, the
+   zustand `persist` option's `name`) that the stored shape is
+   `{"state":{"preference":"light"|"dark"|"system"},"version":0}` (the repo's
+   own `themeStore.test.ts` already asserts this shape via
+   `JSON.parse(raw!).state.preference`, matching what I read from zustand's
+   `persist` middleware source during Task 6's original implementation).
+2. Resolves `'light'`/`'dark'` directly, or `'system'`/missing/corrupted
+   values via `window.matchMedia('(prefers-color-scheme: dark)').matches`.
+3. Sets `document.documentElement.setAttribute('data-theme', resolved)`
+   synchronously.
+4. Wraps everything in try/catch, falling back to `'dark'` on any error
+   (corrupted JSON, `matchMedia` unsupported, `localStorage` throwing e.g.
+   under restrictive privacy settings) — matching this app's established
+   default (also the value baked into `<meta name="theme-color"
+   content="#080A0F">`).
+
+Also added a note to `src/index.css`'s theme-tokens header comment
+explaining *why* there's no bare `:root` fallback (this script covers it),
+so a future editor doesn't reintroduce one — or removes this script — without
+realizing the two are now coupled.
+
+**Testability**: an inline `<script>` in `index.html` can't itself be unit
+tested (it's not a module, isn't part of the Vite build graph, and has no
+import path into the test runner). Per the task's suggested approach, I
+extracted the exact resolution logic into a small pure function,
+`resolveInitialTheme(storedValue, prefersDark)` in new file
+`src/lib/initialTheme.ts`, and gave the inline script a literal copy of the
+same logic (both files cross-reference each other in comments, calling out
+that they must be kept in sync by hand since one can't import the other).
+`src/lib/initialTheme.test.ts` (new, 9 cases) unit-tests
+`resolveInitialTheme` directly: explicit stored `'dark'`/`'light'`
+(ignoring `prefersDark`), stored `'system'` resolving both ways via
+`prefersDark`, no stored value yet (first-ever visit) resolving both ways,
+corrupted JSON, well-formed JSON missing `state.preference`, an
+out-of-domain stored value (e.g. `'purple'`), and an empty string — all
+falling through to the `prefersDark`-driven resolution. I additionally
+verified the inline script's actual emitted position by inspecting
+`dist/index.html` after `npm run build` (see Verification below), which is
+as close to an end-to-end check as this task's sandbox allows without a
+headless browser (same constraint noted in the original report).
+
+Also refactored `src/stores/themeStore.ts` to export the storage key as
+`THEME_STORAGE_KEY = 'tap-theme'` (previously an inline string literal
+passed to `persist(...)`) so there's one canonical source for the key
+referenced from comments/tests, reducing the risk of the inline script's
+hand-copied key drifting from the store's.
+
+### Finding 2 — light-mode `--panel-2`/`--panel-3` values corrected
+
+Confirmed the brief's original light-mode values (`#FBFBFB` / `#F2F2F2`)
+were derived from white rather than from `--panel` (`#F5F5F5`), producing a
+non-monotonic elevation ladder. Updated *only* the two light-mode values in
+`src/index.css`:
+
+- `--panel-2` (light): `#FBFBFB` → `#F1F1F1`
+- `--panel-3` (light): `#F2F2F2` → `#E8E8E8`
+
+Dark-mode `--panel-2`/`--panel-3` (`#272745` / `#34345C`) and every other
+token were left untouched — confirmed via `git diff src/index.css` that
+these were the only two lines changed in this round.
+
+### Verification
+
+- `npm test` — 9/9 test files, **62/62 passing** (the prior 53, plus 9 new
+  in `src/lib/initialTheme.test.ts`; no existing test needed changes).
+- `npm run build` — clean (`tsc -b && vite build`). Inspected
+  `dist/index.html`: the inline bootstrap script is the first substantive
+  element in `<head>` (right after `<meta charset>`), ahead of both the
+  build-injected `<script type="module" ...>` and
+  `<link rel="stylesheet" ...>` tags. Inspected `dist/assets/index-*.css`:
+  `:root[data-theme=light]` now shows `--panel-2:#f1f1f1` and
+  `--panel-3:#e8e8e8`; the dark block's `--panel-2:#272745` /
+  `--panel-3:#34345c` are unchanged.
+- `npm run lint` — same 5 errors / 1 warning as the original report, all
+  pre-existing and in files untouched by this round or Task 6
+  (`IOSInstallBanner.tsx`, `StatusDot.tsx`, `AttendancePage.tsx` ×2,
+  `CompetitiveSetupPage.tsx`). Zero issues in any file this round touched.
+- Manual read-through of the inline script against `resolveInitialTheme`'s
+  now-tested logic confirmed the two are logically identical line-for-line
+  (same variable flow, same fallback order, same error handling).
+
+### Files Changed (this round)
+
+- `index.html` (inline cold-load theme bootstrap script)
+- `src/index.css` (light-mode `--panel-2`/`--panel-3` fix; header comment
+  note about the bootstrap script)
+- `src/stores/themeStore.ts` (exported `THEME_STORAGE_KEY` constant, no
+  behavior change)
+- `src/lib/initialTheme.ts` (new — pure, unit-testable mirror of the inline
+  script's resolution logic)
+- `src/lib/initialTheme.test.ts` (new — 9 cases)
+
+### Concerns
+
+- The inline script and `resolveInitialTheme` are two independent copies of
+  the same logic by necessity (the script can't import a module before the
+  module graph exists). I've cross-referenced them in comments on both
+  sides, but this is a manual-sync hazard for future changes — worth a
+  second look if `themeStore.ts`'s persisted shape or key ever changes.
+- No headless-browser/screenshot confirmation of the actual flash fix (same
+  tooling constraint as the original report — no `chromium-cli`/Playwright
+  browser binary available in this sandbox). Verified instead by build
+  output inspection (script position, resolved CSS values) and unit tests
+  of the extracted logic. Recommend a human visual spot-check (hard-refresh
+  with OS set to dark mode, `localStorage` cleared) before/soon after merge.

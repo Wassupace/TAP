@@ -2,6 +2,56 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      Cold-load theme bootstrap: sets data-theme on <html> synchronously,
+      before the stylesheet is applied and before main.tsx's module script
+      runs (module scripts are deferred by spec). Without this, color
+      tokens in src/index.css (which live only under
+      [data-theme="light"|"dark"], no bare :root fallback) are undefined at
+      first paint, flashing a white/black-text canvas before flipping to the
+      real theme — worst for dark-mode users, this app's default.
+
+      Must stay a plain, non-module, self-contained inline script (no
+      import, no build step) so it runs as early as possible. Reads the
+      same zustand `persist` localStorage key/shape as
+      src/stores/themeStore.ts (THEME_STORAGE_KEY = 'tap-theme',
+      `{"state":{"preference":"light"|"dark"|"system"},"version":0}`) and
+      mirrors the resolution logic in src/lib/initialTheme.ts
+      (resolveInitialTheme) — that module exists so this exact logic is
+      unit-testable; keep both copies in sync if either changes. Any error
+      (corrupted JSON, matchMedia unsupported, localStorage inaccessible)
+      falls back to 'dark', this app's established default.
+    -->
+    <script>
+      (function () {
+        try {
+          var STORAGE_KEY = 'tap-theme'
+          var preference = 'system'
+          var raw = localStorage.getItem(STORAGE_KEY)
+          if (raw) {
+            try {
+              var parsed = JSON.parse(raw)
+              var candidate = parsed && parsed.state && parsed.state.preference
+              if (candidate === 'light' || candidate === 'dark' || candidate === 'system') {
+                preference = candidate
+              }
+            } catch (parseError) {
+              // Corrupted localStorage value — fall through to 'system' resolution below.
+            }
+          }
+
+          var resolved
+          if (preference === 'light' || preference === 'dark') {
+            resolved = preference
+          } else {
+            resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          document.documentElement.setAttribute('data-theme', resolved)
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+        }
+      })()
+    </script>
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="mobile-web-app-capable" content="yes" />
