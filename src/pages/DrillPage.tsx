@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
+import { Avatar } from '../components/ui/Avatar'
 import { Icons } from '../components/ui/icons'
 import { useDrillStore } from '../stores/drillStore'
+import { usePlayers } from '../hooks/usePlayers'
+import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
+import { playerColor } from '../utils/playerColor'
 
 import { type ShotSpot, SPOT_LABELS, SHOT_SPOTS, ALL_SHOT_TYPES } from '../types'
 
@@ -14,8 +18,8 @@ export default function DrillPage() {
     selectedSpots, toggleSpot,
     heatSize, setHeatSize,
     makesTargetPerSpot, setMakesTarget,
-    players,
-    currentSpotIndex, currentPlayerIndex,
+    players, setPlayers,
+    currentSpotIndex, currentPlayerIndex, setCurrentPlayerIndex,
     currentMakes, setMakes,
     completedHeats,
     commitHeat,
@@ -23,8 +27,11 @@ export default function DrillPage() {
     reset,
   } = useDrillStore()
 
+  const { data: allPlayers = [] } = usePlayers()
+
   const [setupStep, setSetupStep] = useState<number | null>(0)
   const [toastVisible, setToastVisible] = useState(false)
+  const [playerPickerOpen, setPlayerPickerOpen] = useState(false)
 
   const activeSpot = selectedSpots[currentSpotIndex] as ShotSpot | undefined
   const activePlayer = players[currentPlayerIndex]
@@ -200,8 +207,41 @@ export default function DrillPage() {
                 Players
               </p>
               <p style={{ fontSize: 13, color: 'var(--dim)', marginBottom: 16 }}>
-                Player selection coming soon. Solo drill by default.
+                {players.length > 0
+                  ? 'Tap to change who is shooting this drill.'
+                  : 'Leave empty for a solo drill — pick players for a group drill.'}
               </p>
+
+              {players.length > 0 && (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                  {players.map(p => (
+                    <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 56 }}>
+                      <Avatar nickname={p.nickname || p.name} color={playerColor(p.id)} size={44} />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 56 }}>
+                        {p.nickname || p.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setPlayerPickerOpen(true)}
+                style={{
+                  width: '100%', minHeight: 52, marginBottom: 16,
+                  borderRadius: 'var(--r-md)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  background: 'var(--panel-2)', border: '1px dashed var(--line-2)',
+                  color: 'var(--orange-2)', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em',
+                  fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                }}
+              >
+                <span style={{ width: 16, height: 16 }}>{Icons.plus}</span>
+                {players.length > 0 ? 'Change Players' : 'Select Players'}
+              </button>
+
               <Button variant="primary" className="w-full !min-h-[54px]" onClick={() => setSetupStep(5)}>
                 Next →
               </Button>
@@ -257,6 +297,16 @@ export default function DrillPage() {
             </div>
           )}
         </div>
+
+        <PlayerPickerModal
+          isOpen={playerPickerOpen}
+          selectedIds={players.map(p => p.id)}
+          onConfirm={(ids) => {
+            const resolved = allPlayers.filter(p => ids.includes(p.id))
+            setPlayers(resolved)
+          }}
+          onClose={() => setPlayerPickerOpen(false)}
+        />
       </div>
     )
   }
@@ -300,8 +350,13 @@ export default function DrillPage() {
 
         {/* Makes counter */}
         <div className="p-6 text-center mb-5" style={{ background: 'var(--panel-2)', borderRadius: 'var(--r-sm)', border: '1px solid var(--line)' }}>
+          {activePlayer && (
+            <p className="font-display text-[26px] uppercase tracking-[.02em] leading-none mb-2" style={{ color: 'var(--chalk)' }}>
+              {activePlayer.nickname || activePlayer.name}
+            </p>
+          )}
           <p className="text-[11px] tracking-[.1em] uppercase text-[var(--faint)] font-bold mb-4">
-            {activeSpot ? SPOT_LABELS[activeSpot] : '—'}{activePlayer ? ` · ${activePlayer.nickname || activePlayer.name} shooting` : ''}
+            {activeSpot ? SPOT_LABELS[activeSpot] : '—'}
           </p>
           <div className="text-[11px] tracking-[.1em] uppercase text-[var(--faint)] font-bold mb-3">MAKES THIS HEAT</div>
           <div className="flex items-center justify-center gap-6">
@@ -321,6 +376,44 @@ export default function DrillPage() {
             >+</button>
           </div>
         </div>
+
+        {/* Roster strip — manual shooter override */}
+        {players.length > 0 && (
+          <>
+            <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-2">Shooter</p>
+            <div className="flex gap-2.5 overflow-x-auto no-scrollbar mb-5" style={{ paddingBottom: 2 }}>
+              {players.map((p, idx) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setCurrentPlayerIndex(idx)}
+                  title={p.nickname || p.name}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0,
+                    width: 52, opacity: idx === currentPlayerIndex ? 1 : 0.5,
+                  }}
+                >
+                  <Avatar
+                    nickname={p.nickname || p.name}
+                    color={playerColor(p.id)}
+                    variant={idx === currentPlayerIndex ? 'active' : 'default'}
+                    size={44}
+                  />
+                  <span
+                    className="text-[10px] font-bold"
+                    style={{
+                      color: idx === currentPlayerIndex ? 'var(--chalk)' : 'var(--faint)',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 52,
+                    }}
+                  >
+                    {p.nickname || p.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Heat history */}
         {heatsForCurrentSpot.length > 0 && (

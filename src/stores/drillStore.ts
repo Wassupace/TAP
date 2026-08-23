@@ -31,6 +31,7 @@ interface DrillStore {
   setHeatSize:    (n: number) => void
   setMakesTarget: (n: number | undefined) => void
   setPlayers:     (p: Player[]) => void
+  setCurrentPlayerIndex: (i: number) => void
   setMakes:       (n: number) => void
   commitHeat:     () => { spotComplete: boolean; drillComplete: boolean }
   undoLastHeat:   () => void
@@ -61,6 +62,7 @@ export const useDrillStore = create<DrillStore>((set, get) => ({
   setHeatSize:    (n) => set({ heatSize: n }),
   setMakesTarget: (n) => set({ makesTargetPerSpot: n }),
   setPlayers:     (p) => set({ players: p }),
+  setCurrentPlayerIndex: (i) => set({ currentPlayerIndex: i }),
   setMakes:       (n) => set({ currentMakes: Math.max(0, Math.min(get().heatSize, n)) }),
 
   commitHeat: () => {
