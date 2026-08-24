@@ -387,7 +387,11 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
 // (same `useActivateSession` call, same `setActiveSession` + nav('/'), same
 // "still land on the local session even if the write fails" fallback) but
 // with every expected player treated as present instead of a checklist
-// selection.
+// selection. "Start Now" is disabled (and shows "Loading roster…") while
+// `usePlayers()` is still loading — the `useActivateSession` write itself
+// uses the persisted `expected_player_ids` directly and is unaffected, but
+// the local nickname display resolved from `allPlayers` would otherwise be
+// silently incomplete if tapped before that query resolves.
 interface StartOrReviewModalProps {
   session: Session
   onClose: () => void
@@ -397,7 +401,7 @@ function StartOrReviewModal({ session, onClose }: StartOrReviewModalProps) {
   const nav = useNavigate()
   const { setActiveSession } = useSessionStore()
   const activateSession = useActivateSession()
-  const { data: allPlayers = [] } = usePlayers()
+  const { data: allPlayers = [], isLoading: playersLoading } = usePlayers()
 
   const expectedCount = session.expected_player_ids.length
 
@@ -433,8 +437,8 @@ function StartOrReviewModal({ session, onClose }: StartOrReviewModalProps) {
             : 'No expected players were saved for this session.'}
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Button variant="primary" onClick={handleStartNow} disabled={activateSession.isPending}>
-            {activateSession.isPending ? 'Starting…' : 'Start Now'}
+          <Button variant="primary" onClick={handleStartNow} disabled={activateSession.isPending || playersLoading}>
+            {activateSession.isPending ? 'Starting…' : playersLoading ? 'Loading roster…' : 'Start Now'}
           </Button>
           <Button variant="secondary" onClick={handleReviewDetails} disabled={activateSession.isPending}>
             Review Details

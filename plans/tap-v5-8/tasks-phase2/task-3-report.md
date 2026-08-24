@@ -109,3 +109,85 @@ None blocking. The one caveat above (players-not-yet-loaded race on a cold
 "Start Now" tap) is worth a follow-up ticket but matches an existing
 app-wide pattern rather than introducing a new one, and fixing it would mean
 also touching `AttendancePage.tsx`, which is explicitly out of scope here.
+
+---
+
+## Fix round 1: loading state on "Start Now" (review finding)
+
+### Finding
+
+Review flagged the caveat noted above as a real UX gap: `StartOrReviewModal`
+read `usePlayers()` without checking `isLoading`, so a coach could tap
+"Start Now" during the window before the roster query resolves with no
+visual indication anything was off — unlike `AttendancePage.tsx`'s checklist,
+which at least visually shows an empty list while loading. Confirmed not a
+data-integrity bug: `useActivateSession` writes the real, already-persisted
+`session.expected_player_ids` directly, never anything derived from
+`allPlayers`. Only the local `setActiveSession(...)` nickname-display array
+was at risk of being silently under-populated.
+
+### Fix
+
+In `src/pages/CalendarPage.tsx`'s `StartOrReviewModal` only (no other file
+touched, `AttendancePage.tsx` untouched per the fix brief):
+
+- Destructured `isLoading: playersLoading` from the existing `usePlayers()`
+  call (was previously only reading `data`).
+- "Start Now" button: `disabled` now also checks `playersLoading` (in
+  addition to the existing `activateSession.isPending`).
+- Label now has a three-way precedence: `activateSession.isPending ?
+  'Starting…' : playersLoading ? 'Loading roster…' : 'Start Now'` — mirrors
+  the exact `openSession.isPending ? 'Opening…' : 'Open Session'` pattern
+  already used by this file's quick-start sheet, just with the extra loading
+  rung.
+- Updated the block comment above the component to document the new
+  behavior and why (write path is unaffected, only the local nickname
+  display was at risk).
+
+"Review Details" is untouched — it never depended on `allPlayers`.
+
+### What I tested
+
+- `npm run build` — clean (`tsc -b && vite build`), no new type errors.
+- `npm test` — 14 files / 103 tests, all passing (no new tests added: this
+  is pure UI-state wiring — a boolean flowing into `disabled` and a label
+  string — with no pure-logic extraction point, and the repo has no
+  component-rendering test library, consistent with the original
+  implementation's rationale for not adding one). Manual self-review below
+  stands in.
+- `npm run lint` — same 5 pre-existing errors, same files/lines as the
+  original report (`IOSInstallBanner.tsx` ×1, `StatusDot.tsx` ×1,
+  `AttendancePage.tsx` ×2, `CompetitiveSetupPage.tsx` ×1). Zero lint issues
+  in `CalendarPage.tsx`.
+
+### Self-review
+
+- **Does the write path still use the real persisted ids, unaffected by
+  this change?** Yes — `handleStartNow`'s `activateSession.mutateAsync`
+  call is untouched; it still passes `session.expected_player_ids` directly,
+  never `allPlayers`-derived data. This fix only gates *when the button is
+  tappable*, not what gets written.
+- **Can a coach still get stuck if the players query never resolves (e.g.
+  offline, query error)?** `usePlayers()`'s `isLoading` is `true` only
+  during the initial fetch; on error it settles to `false` with `data`
+  falling back to `[]` (existing default), so the button un-disables and
+  "Start Now" becomes tappable again — same "keep going even if a query/
+  write fails" tolerance the rest of this modal (and `AttendancePage.tsx`)
+  already leans on. Not a new stuck state.
+- **Does disabling "Start Now" block "Review Details" too?** No —
+  `Review Details`'s `disabled` still only checks
+  `activateSession.isPending`, unchanged. A coach can still bail into the
+  full checklist flow immediately even while the roster is loading.
+- **Any styling added outside `var(--...)` tokens?** No new styling — only
+  a `disabled` boolean and a label string changed; no new markup or inline
+  styles.
+
+### Files changed
+
+- `src/pages/CalendarPage.tsx` — only file touched (same as original
+  implementation).
+
+### Concerns
+
+None. This closes the one caveat flagged in the original report without
+touching `AttendancePage.tsx` or any Task 2 code.
