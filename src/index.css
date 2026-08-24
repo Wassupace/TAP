@@ -25,7 +25,9 @@
   --line-2:    rgba(0,0,0,.10);
   --chalk:     #1A1A2E;
   --dim:       #666666;
-  --faint:     #969696;
+  /* #6B6B6B against --panel #F5F5F5 is ~4.89:1 (WCAG AA, computed via the
+     relative-luminance formula) — the prior #969696 was only 2.71:1. */
+  --faint:     #6B6B6B;
   --orange:    #E8500A;
   --orange-2:  #F66E2F;
   --orange-soft: rgba(232,80,10,.14);
@@ -40,6 +42,11 @@
   /* Sport Card extras */
   --hero-gradient: linear-gradient(135deg, #F7F7F7 0%, #F5F5F5 100%);
   --accent-glow:   0 4px 14px rgba(232,80,10,.25);
+  /* Hero-card eyebrow label text, rendered on --hero-gradient. #1D4ED8
+     against the gradient's lighter stop #F7F7F7 is ~6.26:1 and against
+     #F5F5F5 is ~6.15:1 (WCAG AA) — the dark-mode #93C5FD used here was only
+     ~1.68:1 in light mode. */
+  --hero-eyebrow: #1D4ED8;
 
   --r-lg: 16px;
   --r-md: 12px;
@@ -72,6 +79,10 @@
   /* Sport Card extras */
   --hero-gradient: linear-gradient(135deg, #21213B 0%, #0F0F14 100%);
   --accent-glow:   0 4px 14px rgba(232,80,10,.25);
+  /* Hero-card eyebrow label text, rendered on --hero-gradient. Kept at the
+     existing #93C5FD — this is dark mode's current, already-correct
+     appearance (~8.66:1 against the gradient's darker stop #21213B). */
+  --hero-eyebrow: #93C5FD;
 
   --r-lg: 16px;
   --r-md: 12px;

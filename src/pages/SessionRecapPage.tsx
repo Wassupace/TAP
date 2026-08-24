@@ -34,7 +34,7 @@ export default function SessionRecapPage() {
 
         {/* Hero summary card */}
         <Card variant="hero" style={{ marginBottom: 20 }}>
-          <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 6px' }}>
+          <p style={{ fontSize: 11, color: 'var(--hero-eyebrow)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 6px' }}>
             Session Complete
           </p>
           <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 28, letterSpacing: '-0.02em' }}>

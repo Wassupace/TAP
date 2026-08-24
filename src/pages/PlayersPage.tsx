@@ -73,7 +73,7 @@ export default function PlayersPage() {
         borderRadius: 'var(--r-lg)',
         padding: '16px 18px', marginBottom: 16, marginTop: 16,
       }}>
-        <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Roster</p>
+        <p style={{ fontSize: 11, color: 'var(--hero-eyebrow)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Roster</p>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Players</div>
           <button type="button" onClick={() => setShowAdd(true)} style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)', color: 'var(--chalk)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>

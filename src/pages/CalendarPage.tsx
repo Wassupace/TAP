@@ -79,7 +79,7 @@ export default function CalendarPage() {
       <BackButton onClick={() => nav('/')}>Dashboard</BackButton>
 
       <div style={{ background: 'var(--hero-gradient)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 'var(--r-lg)', padding: '16px 18px', marginBottom: 20 }}>
-        <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Sessions</p>
+        <p style={{ fontSize: 11, color: 'var(--hero-eyebrow)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Sessions</p>
         <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Calendar</div>
       </div>
 

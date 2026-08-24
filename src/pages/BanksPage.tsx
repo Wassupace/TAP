@@ -41,7 +41,7 @@ export default function BanksPage() {
         marginBottom: 20,
         marginTop: 16,
       }}>
-        <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Banks · {SPOT_LABEL}</p>
+        <p style={{ fontSize: 11, color: 'var(--hero-eyebrow)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>Banks · {SPOT_LABEL}</p>
         <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Result</div>
       </div>
 
