@@ -2,9 +2,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackButton } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
+import { Tag } from '../components/ui/Tag'
 import { Icons } from '../components/ui/icons'
 import { usePlayers, useAddPlayer } from '../hooks/usePlayers'
+import { usePlayerWL } from '../hooks/usePlayerStats'
 import { playerColor } from '../utils/playerColor'
+import type { Player } from '../types'
 
 function AddPlayerSheet({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
@@ -45,6 +48,51 @@ function AddPlayerSheet({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </div>
+  )
+}
+
+// One roster row, extracted so `usePlayerWL` can be called per-row (a hook
+// can't be called inside the `.map()` below without violating rules-of-
+// hooks) — one extra query per visible row is acceptable at this app's
+// roster scale (Task 12 brief). Fixes PRD bug §12.1's "wasted space" on the
+// roster row with a W-L pill, e.g. "12-4", or "–" before the player has any
+// games yet.
+function PlayerRosterRow({
+  player, isHovered, color, onClick, onHoverStart, onHoverEnd,
+}: {
+  player: Player
+  isHovered: boolean
+  color: string
+  onClick: () => void
+  onHoverStart: () => void
+  onHoverEnd: () => void
+}) {
+  const { data: wl } = usePlayerWL(player.id)
+  const total = (wl?.wins ?? 0) + (wl?.losses ?? 0)
+  const wlLabel = total > 0 ? `${wl!.wins}-${wl!.losses}` : '–'
+  const wlVariant = total === 0 ? 'neutral' : wl!.wins >= wl!.losses ? 'positive' : 'negative'
+
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
+      className="w-full flex gap-3 items-center p-[13px_14px] cursor-pointer text-left transition-all"
+      style={{
+        background: isHovered ? 'var(--panel-2)' : 'var(--panel)',
+        border: '1px solid var(--line)',
+        borderRadius: 'var(--r-md)',
+        borderLeft: isHovered ? `3px solid ${color}` : '1px solid var(--line)',
+        paddingLeft: isHovered ? 11 : 14,
+      }}
+    >
+      <Avatar nickname={player.nickname} color={color} />
+      <div className="flex-1">
+        <div className="font-bold text-[14px]">{player.nickname}</div>
+        <div className="text-[12px] text-[var(--dim)]">{player.name}</div>
+      </div>
+      <Tag variant={wlVariant}>{wlLabel}</Tag>
+    </button>
   )
 }
 
@@ -112,32 +160,17 @@ export default function PlayersPage() {
       )}
 
       <div className="space-y-2 stagger">
-        {filtered.map(p => {
-          const isHovered = hoveredId === p.id
-          const color = playerColor(p.id)
-          return (
-            <button
-              key={p.id}
-              onClick={() => nav(`/players/${p.id}`)}
-              onMouseEnter={() => setHoveredId(p.id)}
-              onMouseLeave={() => setHoveredId(null)}
-              className="w-full flex gap-3 items-center p-[13px_14px] cursor-pointer text-left transition-all"
-              style={{
-                background: isHovered ? 'var(--panel-2)' : 'var(--panel)',
-                border: '1px solid var(--line)',
-                borderRadius: 'var(--r-md)',
-                borderLeft: isHovered ? `3px solid ${color}` : '1px solid var(--line)',
-                paddingLeft: isHovered ? 11 : 14,
-              }}
-            >
-              <Avatar nickname={p.nickname} color={color} />
-              <div className="flex-1">
-                <div className="font-bold text-[14px]">{p.nickname}</div>
-                <div className="text-[12px] text-[var(--dim)]">{p.name}</div>
-              </div>
-            </button>
-          )
-        })}
+        {filtered.map(p => (
+          <PlayerRosterRow
+            key={p.id}
+            player={p}
+            isHovered={hoveredId === p.id}
+            color={playerColor(p.id)}
+            onClick={() => nav(`/players/${p.id}`)}
+            onHoverStart={() => setHoveredId(p.id)}
+            onHoverEnd={() => setHoveredId(null)}
+          />
+        ))}
       </div>
 
       {showAdd && <AddPlayerSheet onClose={() => setShowAdd(false)} />}

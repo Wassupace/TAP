@@ -1,6 +1,6 @@
 import { type CSSProperties } from 'react'
 
-type TagVariant = 'match' | 'drill' | 'banks' | 'generic' | 'neutral'
+type TagVariant = 'match' | 'drill' | 'banks' | 'generic' | 'neutral' | 'positive' | 'negative'
 
 interface TagProps {
   variant?: TagVariant
@@ -13,6 +13,10 @@ const styles: Record<TagVariant, CSSProperties> = {
   banks:   { background: 'rgba(245,158,11,0.15)',  color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
   generic: { background: 'rgba(168,85,247,0.15)',  color: '#C084FC', border: '1px solid rgba(168,85,247,0.3)' },
   neutral: { background: 'var(--panel-2)',          color: 'var(--dim)', border: '1px solid var(--line)' },
+  // CSS-var-only variants (Task 12's roster W-L pill, PRD bug §12.1) — no
+  // hardcoded hex/rgba, unlike the categorical variants above.
+  positive: { background: 'var(--green-soft)',       color: 'var(--green)', border: '1px solid var(--green-soft)' },
+  negative: { background: 'var(--red-soft)',         color: 'var(--red)',   border: '1px solid var(--red-soft)' },
 }
 
 export function Tag({ variant = 'neutral', children }: TagProps) {

@@ -1,13 +1,7 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { BackButton } from '../components/ui/Button'
-
-const DATA = [
-  { f: '1v1', w: 5,  l: 2  },
-  { f: '2v2', w: 9,  l: 4  },
-  { f: '3v3', w: 18, l: 9  },
-  { f: '4v4', w: 11, l: 6  },
-  { f: '5v5', w: 4,  l: 2  },
-]
+import { usePlayer } from '../hooks/usePlayers'
+import { usePlayerWLByFormat, usePlayerRecreationalRecord } from '../hooks/usePlayerStats'
 
 // Accent colours per format for left-border tinting
 const FORMAT_COLORS: Record<string, string> = {
@@ -20,10 +14,21 @@ const FORMAT_COLORS: Record<string, string> = {
 
 export default function WinLossPage() {
   const nav = useNavigate()
+  const { id = '' } = useParams<{ id: string }>()
+
+  const { data: player } = usePlayer(id)
+  const { data: byFormatData } = usePlayerWLByFormat(id)
+  const { data: recreational } = usePlayerRecreationalRecord(id)
+  const byFormat = byFormatData ?? []
+
+  const recWins = recreational?.wins ?? 0
+  const recLosses = recreational?.losses ?? 0
 
   return (
     <div className="min-h-dvh px-[18px] pt-[54px] pb-8">
-      <BackButton onClick={() => nav('/players/1')}>JC's profile</BackButton>
+      <BackButton onClick={() => nav(`/players/${id}`)}>
+        {player ? `${player.nickname}'s profile` : 'Profile'}
+      </BackButton>
 
       {/* Hero gradient header */}
       <div style={{
@@ -37,14 +42,14 @@ export default function WinLossPage() {
       </div>
 
       <div className="space-y-2.5 stagger">
-        {DATA.map(({ f, w, l }) => {
-          const tot = w + l
-          const pct = Math.round(w / tot * 100)
-          const green = pct >= 50
-          const accentColor = FORMAT_COLORS[f] ?? 'var(--orange)'
+        {byFormat.map(({ format, wins, losses }) => {
+          const tot = wins + losses
+          const pct = tot > 0 ? Math.round(wins / tot * 100) : 0
+          const green = tot > 0 && pct >= 50
+          const accentColor = FORMAT_COLORS[format] ?? 'var(--orange)'
           return (
             <div
-              key={f}
+              key={format}
               className="p-4 flex items-center gap-3.5"
               style={{
                 background: 'var(--panel)',
@@ -54,14 +59,14 @@ export default function WinLossPage() {
                 paddingLeft: 14,
               }}
             >
-              <div className="font-display text-[18px] w-12 shrink-0" style={{ color: accentColor }}>{f}</div>
+              <div className="font-display text-[18px] w-12 shrink-0" style={{ color: accentColor }}>{format}</div>
               <div className="flex-1">
                 <div className="stat-track">
                   <div className={`stat-fill ${green ? 'stat-fill-green' : 'stat-fill-red'}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
               <div className="text-right font-bold text-[14px] shrink-0">
-                <span className="font-display">{w}</span>–<span className="font-display">{l}</span>{' '}
+                <span className="font-display">{wins}</span>–<span className="font-display">{losses}</span>{' '}
                 <span className="text-[12px] text-[var(--dim)]">{pct}%</span>
               </div>
             </div>
@@ -80,8 +85,8 @@ export default function WinLossPage() {
           paddingLeft: 14,
         }}
       >
-        <span className="text-[14px] text-[var(--dim)]">Banks · Middies · Next</span>
-        <span className="font-display text-chalk">22–14</span>
+        <span className="text-[14px] text-[var(--dim)]">Banks · Next · Generic</span>
+        <span className="font-display text-chalk">{recWins}–{recLosses}</span>
       </div>
     </div>
   )
