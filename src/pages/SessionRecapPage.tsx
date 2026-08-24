@@ -4,6 +4,7 @@ import { Card } from '../components/ui/Card'
 import { Icons } from '../components/ui/icons'
 import { useSession } from '../hooks/useSessions'
 import { useActivityFeed } from '../hooks/useActivityFeed'
+import { useSessionHighlights } from '../hooks/useSessionHighlights'
 import { fmtDuration } from '../utils/formatDuration'
 
 export default function SessionRecapPage() {
@@ -12,6 +13,7 @@ export default function SessionRecapPage() {
 
   const { data: session } = useSession(sessionId)
   const { data: activities = [] } = useActivityFeed(sessionId || null)
+  const { highlight, toWorkOn } = useSessionHighlights(sessionId)
 
   const duration = fmtDuration(session?.started_at, session?.ended_at)
   const dateStr = session?.date
@@ -52,6 +54,36 @@ export default function SessionRecapPage() {
                   {matchActivities.length > 0 && drillActivities.length > 0 && ' · '}
                   {drillActivities.length > 0 && `${drillActivities.length} drill${drillActivities.length > 1 ? 's' : ''}`}
                 </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Highlight callout: session-wide closest game across every match logged */}
+        {highlight && (
+          <Card variant="accent" style={{ marginBottom: 8 }}>
+            <div className="flex gap-3">
+              <div className="w-[42px] h-[42px] grid place-items-center flex-none" style={{ borderRadius: 'var(--r-sm)', background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
+                <span className="w-[21px] h-[21px]">{Icons[highlight.icon]}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 4 }}>{highlight.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--chalk)', lineHeight: 1.35 }}>{highlight.value}</div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* To work on callout: worst-performing drill spot across every drill logged */}
+        {toWorkOn && (
+          <Card variant="accent" style={{ marginBottom: 8 }}>
+            <div className="flex gap-3">
+              <div className="w-[42px] h-[42px] grid place-items-center flex-none" style={{ borderRadius: 'var(--r-sm)', background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
+                <span className="w-[21px] h-[21px]">{Icons[toWorkOn.icon]}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 4 }}>{toWorkOn.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--chalk)', lineHeight: 1.35 }}>{toWorkOn.value}</div>
               </div>
             </div>
           </Card>
