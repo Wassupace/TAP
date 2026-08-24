@@ -305,3 +305,90 @@ the future-date `+`-indicator logic (`isFutureCell`) were not modified.
 `selectDayPills`, `isMissed`, `pillState`, and `PILL_PRIORITY` (Task 2's
 missed-session and pill-selection logic) are unchanged — only the label
 text and the selected-cell color path changed.
+
+---
+
+## Fix round 2 (controller-level finding)
+
+**Finding.** Round 1's fix (dropping the pill's status suffix, see above) was
+correct given the grid's real ~33px text budget, but it had a side effect
+nobody had fixed yet: completed-session **duration** became unreachable
+anywhere in the Calendar view. The "Selected day sessions" list below the
+grid showed `s.location` and a bare `{s.state}` word, with its only
+interactive element (`Open →`) gated to `s.state === 'planned'` — no duration
+display, no tap-through, for completed sessions. Direct regression against
+PRD §3.2's "gym name + duration for past sessions" requirement.
+
+**Fix, scoped strictly to `state === 'completed'` rows in that list** (verified
+`state === 'planned'`/`'active'` rows are byte-for-byte unchanged in the diff
+below):
+
+1. **Duration.** `SessionRecapPage.tsx`'s local `fmtDuration()` was extracted
+   to a new shared file, `src/utils/formatDuration.ts`, and both
+   `SessionRecapPage.tsx` and `CalendarPage.tsx` now import it from there —
+   chosen over duplicating a second copy because this repo's convention for
+   small pure formatting/logic helpers used from more than one place is to
+   live in `src/utils/*.ts` with a co-located `*.test.ts` (confirmed by
+   `calendarPills.ts`, `matchesPlayerQuery.ts`, `parseNumberPadDigits.ts`,
+   `playerColor.ts`, `rosterPlayerMatch.ts` — every existing shared helper in
+   this codebase follows that pattern; none are duplicated per-file). In the
+   selected-day list, the state line for a completed session now reads
+   `"completed · 2h 30min"` instead of a bare `"completed"` — planned/active
+   rows still render the bare state word, untouched.
+2. **Tap-through.** A second `Open →` button, gated to `s.state ===
+   'completed'`, navigates to `/session-recap/${s.id}` — the existing route,
+   confirmed wired in `src/App.tsx` (`<Route path="/session-recap/:id"
+   element={<SessionRecapPage />} />`) before touching anything, per the
+   brief's explicit ask not to just trust the description. Also confirmed
+   `useSession(id)` (`src/hooks/useSessions.ts`) fetches by arbitrary session
+   id via a plain Supabase `.eq('id', id).single()` query, `enabled` only
+   excluding the unrelated literal `'morning'` id used elsewhere — so it
+   renders correctly for any real completed session id, not just a
+   coincidentally-working one. The button reuses the planned-session
+   button's exact inline style object (same font-size/weight/color, `none`
+   background/border, `pointer` cursor) and sits in the same position in the
+   row (immediately after the planned-only button, mutually exclusive since
+   a session can't be both `planned` and `completed`) — visually
+   indistinguishable from the existing pattern beyond its label's target.
+3. **Scope check.** Confirmed via `git diff` that the only lines touched in
+   the planned-button JSX are zero — it's byte-for-byte identical before and
+   after. The `active` row (no button at all, previously and now) is also
+   unchanged. Grid-pill rendering, `calendarPills.ts`,
+   `PlanSessionSheet`/quick-start sheet, and `isFutureCell` were not touched.
+
+### Files changed this round
+
+- `src/utils/formatDuration.ts` (new) — `fmtDuration()`, moved verbatim from
+  `SessionRecapPage.tsx`, now exported and shared.
+- `src/utils/formatDuration.test.ts` (new) — 7 unit tests: missing
+  `startedAt`, missing `endedAt`, both missing, sub-hour formatting,
+  hour-plus formatting, exact-hour formatting (0 minutes), zero-length
+  duration.
+- `src/pages/SessionRecapPage.tsx` — local `fmtDuration()` definition removed;
+  now imports the shared one. No behavior change (identical implementation).
+- `src/pages/CalendarPage.tsx` — imports `fmtDuration`; the selected-day
+  list's state line now shows `"completed · <duration>"` for completed
+  sessions (bare state word for planned/active, unchanged); a new `Open →`
+  button for `state === 'completed'` navigates to `/session-recap/${s.id}`.
+
+### Tests
+
+- `npm test` — 14 test files, **103 tests passing** (96 before this round +
+  7 new in `formatDuration.test.ts`; all 96 pre-existing tests untouched and
+  still passing, including all 96 from round 1).
+- `npm run build` — passes (`tsc -b` + `vite build`, no errors).
+- `npm run lint` — same 5 pre-existing errors in the same unrelated files
+  (`IOSInstallBanner.tsx`, `StatusDot.tsx`, `AttendancePage.tsx` ×2,
+  `CompetitiveSetupPage.tsx`) plus their 1 pre-existing warning, all
+  predating this task; zero lint issues in any file this round touched or
+  added (`formatDuration.ts`, `formatDuration.test.ts`, `CalendarPage.tsx`,
+  `SessionRecapPage.tsx`).
+
+### Not touched
+
+`state === 'planned'` and `state === 'active'` rows in the selected-day
+list, the grid mini-pills (`calendarPills.ts`, `.cal-pill`/`.cal-day-pills`
+CSS, `pillLabel`/`selectDayPills`/`isMissed`/`pillState`), `PlanSessionSheet`,
+the quick-start sheet, and `isFutureCell` — all per the global constraints
+and the brief's explicit scoping to completed-row duration + tap-through
+only.

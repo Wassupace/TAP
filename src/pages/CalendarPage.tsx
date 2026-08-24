@@ -7,6 +7,7 @@ import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { useSessionStore } from '../stores/sessionStore'
 import type { Session } from '../types'
 import { isMissed, pillState, selectDayPills, pillLabel, type PillState } from '../utils/calendarPills'
+import { fmtDuration } from '../utils/formatDuration'
 
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
@@ -201,11 +202,28 @@ export default function CalendarPage() {
               </div>
               <div className="flex-1">
                 <div className="font-bold text-[14px]">{s.location}</div>
-                <div className="text-[12px] mt-0.5" style={{ color: stateColor(s) }}>{s.state}</div>
+                <div className="text-[12px] mt-0.5" style={{ color: stateColor(s) }}>
+                  {s.state === 'completed' ? `${s.state} · ${fmtDuration(s.started_at, s.ended_at)}` : s.state}
+                </div>
               </div>
               {s.state === 'planned' && (
                 <button
                   onClick={() => nav(`/calendar/attendance/${s.id}`)}
+                  style={{ fontSize: 12, fontWeight: 700, color: 'var(--orange-2)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Open →
+                </button>
+              )}
+              {s.state === 'completed' && (
+                // Review fix (round 2): completed sessions had no tap-through and
+                // no duration anywhere in the Calendar view — the grid mini-pill
+                // can't fit "location + duration" text (see calendarPills.ts's
+                // budget derivation), so this list is the only place left that
+                // can carry it. Mirrors the planned-session "Open →" button above
+                // (same styling/position), routing to the recap page instead of
+                // attendance since the session is already finished.
+                <button
+                  onClick={() => nav(`/session-recap/${s.id}`)}
                   style={{ fontSize: 12, fontWeight: 700, color: 'var(--orange-2)', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   Open →

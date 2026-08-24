@@ -4,14 +4,7 @@ import { Card } from '../components/ui/Card'
 import { Icons } from '../components/ui/icons'
 import { useSession } from '../hooks/useSessions'
 import { useActivityFeed } from '../hooks/useActivityFeed'
-
-function fmtDuration(startedAt: string | undefined | null, endedAt: string | undefined | null): string {
-  if (!startedAt || !endedAt) return '—'
-  const ms = new Date(endedAt).getTime() - new Date(startedAt).getTime()
-  const h = Math.floor(ms / 3_600_000)
-  const m = Math.floor((ms % 3_600_000) / 60_000)
-  return h > 0 ? `${h}h ${m}min` : `${m}min`
-}
+import { fmtDuration } from '../utils/formatDuration'
 
 export default function SessionRecapPage() {
   const nav = useNavigate()
