@@ -1,0 +1,713 @@
+---
+title: TAP v5.8 gap-closure plan
+kind: Implementation plan
+status: Awaiting review
+owner: amelliti
+repo: tap-pwa
+summary: Bring the shipped app in line with PRD v5.8 — the data model is already close to spec, but several modules are wired to mock data, one has a live data-integrity bug, and the whole UI needs a manual theme toggle and exact palette.
+---
+
+PRD v5.8 reads like a big jump from what's running today, but the gap is narrower
+than the document suggests. The Postgres schema (`supabase/migrations/001` and
+`002`) already models almost everything v5.8 asks for — planned/active sessions,
+player shooting targets, per-hand drill data, competitive game results. The real
+work is in the client: several screens that look finished are wired to hardcoded
+arrays instead of that schema, three different ad-hoc "add a player" inputs exist
+where the PRD wants one reusable picker, and the Drills module has been silently
+saving every heat with an empty `player_id` since it shipped.
+
+This plan is organized by PRD section so it can be reviewed and executed in
+parallel by module. Each section states what already works, cites the file that
+proves it, and scopes the delta.
+
+<Callout tone="risk" label="Fix first, independent of everything else">
+`src/pages/DrillPage.tsx`'s setup wizard never calls `drillStore.setPlayers()` —
+Step 4 is a placeholder ("Player selection coming soon. Solo drill by default.").
+Every `heat_entries` row committed by `commitHeat()` today has
+`player_id: players[currentPlayerIndex]?.id ?? ''`, which resolves to `''` because
+`players` is always empty. Every drill logged in production so far is
+unattributed. This is a one-file fix (wire the Player Picker Modal into that
+step) and should ship before anything else in this plan, since every day it's
+unfixed is more unattributable data.
+</Callout>
+
+## Current state at a glance
+
+| Module | Data model | Client wiring |
+| --- | --- | --- |
+| Sessions lifecycle | Ready (`sessions.state`, `is_recurring`) | Planned state exists in the type but no code path ever creates one — `useOpenSession`/`useActivateSession` both hardcode `active` |
+| Player profiles | Ready (`target_ft/mid/3pt_percent`) | Targets aren't editable; profile card has no recent-activity log; shot chart FT marker is a hardcoded number |
+| Shot chart | 15 zones render correctly with correct color thresholds and correct line layering | 5 of the 15 zones (restricted area + 4 interior) have no matching `ShotSpot` value, so they can never receive real data |
+| Matches | Ready (`scoring_style`, per-game rosters) | Duration Wave mode is UI-only decoration — always sends `targetScore`; team reassignment (`movePlayer`) exists in the store but no UI calls it |
+| Competitive games | Ready (`competitive_games`, `competitive_results` cover all 4 types) | Banks is 100% hardcoded mock data; Middies/Next/Generic have no data-entry screen at all |
+| Drills | Ready (`heat_entries.hand`, `.spot`) | Active shooter is never set — see callout above |
+| Sheets export | N/A | Works, but ships the Google OAuth client secret in the browser bundle, and writes 7 tabs while the UI says 6 |
+| Theming | N/A | Dark/light already exist as CSS custom properties keyed off `prefers-color-scheme`, but there's no manual toggle and the palette doesn't match the PRD's hex values anywhere |
+
+## Data model changes
+
+Smaller than expected: one constraint is missing, and one taxonomy extension is
+TypeScript-only. Nothing else in this plan needs a migration.
+
+<Code file="supabase/migrations/003_v58_additions.sql" lang="sql">{`
+alter table sessions
+  add constraint sessions_state_valid
+  check (state in ('planned', 'active', 'completed'));
+`}</Code>
+
+<Decision question="How do we resolve PRD 1.3's last-write-wins requirement?">
+  <Option name="No schema change — current behavior already satisfies it" picked>
+    This is a single-scribe, single-device app (PRD 1.2: "single user, single
+    scribe"). There is no concurrent-writer scenario for LWW to arbitrate —
+    `dbUpdate`'s plain `.update(...).eq('id', rowId)` and `syncQueue.ts`'s
+    retry-on-reconnect already apply writes in the order they reach Postgres,
+    which *is* last-write-wins for a single writer. Adding an `updated_at`/version
+    column buys nothing without a second writer to compare against.
+  </Option>
+  <Option name="Add updated_at + version to every mutable table">
+    Standard LWW plumbing, but it's schema and query overhead in service of a
+    conflict that can't currently occur. Revisit if a second device or a
+    collaborative-scribe feature ever ships.
+  </Option>
+</Decision>
+
+<Decision question="Where does location-history autocomplete's data come from?">
+  <Option name="Derive from existing sessions.location, no new table" picked>
+    `SELECT DISTINCT location FROM sessions ORDER BY date DESC LIMIT 20` (or the
+    equivalent client-side dedupe over the `useSessions` cache already loaded for
+    the Calendar) gives the exact "previously used locations surface as tappable
+    suggestions" behavior PRD 3.2 asks for, with zero migration.
+  </Option>
+  <Option name="New location_history table">
+    Only useful if locations ever need metadata (address, default duration).
+    Nothing in v5.8 asks for that.
+  </Option>
+</Decision>
+
+## Global UI primitives
+
+Three pieces get built once and reused everywhere — building them first
+un-blocks the Sessions, Matches, and Drills sections below, all of which
+currently duplicate ad-hoc versions of the same interaction.
+
+<Decision question="Player Picker Modal: one shared component, or leave the three existing ad-hoc inputs?">
+  <Option name="Build src/components/ui/PlayerPickerModal.tsx once" picked>
+    Today there are three different, non-shared "add a player" UIs: a free-text
+    nickname input in `DashboardPage.tsx`'s `NewSessionModal`, an inline free-text
+    input in `ActiveDashboard`'s roster strip, and `AttendancePage.tsx`'s full-page
+    checklist (the only one actually backed by `usePlayers()`). None dedupe
+    against the real player database, none highlight already-selected players,
+    none have the spec'd floating "Add New Player" affordance. PRD 3.5 asks for
+    this exact modal in two places (session start, live session) — Drills setup
+    (§7.1a) and Matches pause-to-sub (§5.5) need the identical capability. One
+    component, five call sites.
+  </Option>
+  <Option name="Keep three separate inputs, patch each individually">
+    Cheaper per-screen but guarantees the next screen that needs "add a player"
+    invents a sixth variant. The PRD explicitly calls out "consistent behaviour
+    across both entry points" (3.5) — a shared component is what makes that true
+    by construction instead of by discipline.
+  </Option>
+</Decision>
+
+<Canvas title="Player Picker Modal">
+  <Screen label="Default — searchable roster" surface="mobile" url="tap.app"
+    note="Persistent modal, stays open across selections. Already-selected players stay visible with an accent border rather than disappearing — matches PRD 3.5's 'remain visible in the list, not hidden or greyed out.'"
+    html={`
+<div style="display:flex;flex-direction:column;height:100%">
+  <div style="padding:14px;border-bottom:1.3px solid var(--wf-line);display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Add players</h2>
+      <button>Confirm</button>
+    </div>
+    <input placeholder="Search roster" />
+  </div>
+  <div style="flex:1;overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:8px">
+    <div class="wf-card" style="display:flex;align-items:center;gap:10px;border-color:var(--wf-accent)">
+      <span class="wf-avatar"></span><span style="flex:1">Marcus</span><span class="wf-pill accent">selected</span>
+    </div>
+    <div class="wf-card" style="display:flex;align-items:center;gap:10px">
+      <span class="wf-avatar"></span><span style="flex:1">JC</span>
+    </div>
+    <div class="wf-card" style="display:flex;align-items:center;gap:10px">
+      <span class="wf-avatar"></span><span style="flex:1">Dre</span>
+    </div>
+    <div class="wf-card" style="display:flex;align-items:center;gap:10px;border-color:var(--wf-accent)">
+      <span class="wf-avatar"></span><span style="flex:1">Tomas</span><span class="wf-pill accent">selected</span>
+    </div>
+    <div class="wf-card" style="display:flex;align-items:center;gap:10px">
+      <span class="wf-avatar"></span><span style="flex:1">Sef</span>
+    </div>
+  </div>
+  <div style="padding:14px;border-top:1.3px solid var(--wf-line)">
+    <button class="primary" style="width:100%">+ Add new player</button>
+  </div>
+</div>`} />
+  <Screen label="Inline new-player form" surface="mobile" url="tap.app"
+    note="Tapping 'Add new player' expands in place — no navigation, no second modal. Saves and auto-selects for the current context in one tap."
+    html={`
+<div style="display:flex;flex-direction:column;height:100%">
+  <div style="padding:14px;border-bottom:1.3px solid var(--wf-line)">
+    <h2 style="margin:0">Add players</h2>
+  </div>
+  <div style="flex:1;padding:12px"></div>
+  <div style="padding:14px;border-top:1.3px solid var(--wf-line);display:flex;flex-direction:column;gap:10px">
+    <label>Name<input value="Alexandre" /></label>
+    <label>Nickname<input value="Alex" /></label>
+    <button class="primary">Save &amp; add to session</button>
+  </div>
+</div>`} />
+</Canvas>
+
+<Decision question="Global numpad rule (PRD 1.4): add a shared NumberPad, or leave tap-to-increment as-is?">
+  <Option name="Add src/components/ui/NumberPad.tsx; keep the existing +/- buttons alongside it" picked>
+    Today `MatchActivePage.tsx`'s score and `DrillPage.tsx`'s makes counter render
+    the number itself with no `onClick` — only the separate +/- buttons are
+    interactive. The PRD's rule is universal and explicit ("No exceptions"). The
+    fast quick-increment buttons stay for the common case (make, miss); tapping
+    the number itself opens the numpad for correcting a fat-fingered value or
+    entering a value far from zero (e.g. a 47-point margin), which the +/- buttons
+    handle badly today.
+  </Option>
+  <Option name="Replace +/- entirely with numpad-only entry">
+    Matches PRD's "no exceptions" wording most literally, but a numpad for every
+    single make during a drill is slower than a tap — directly against P4 (speed
+    over completeness). The additive approach gets the same data-correction
+    capability without regressing the common path.
+  </Option>
+</Decision>
+
+<Decision question="Theme: adopt the PRD's exact hex palette, or keep the current 'Sport Card' palette and only add the missing manual toggle?">
+  <Option name="Adopt PRD's exact tokens" picked>
+    The current theme is already centralized as CSS custom properties in
+    `src/index.css` (`--ink`, `--panel`, `--chalk`, `--orange`, etc.), flipped by a
+    single `@media (prefers-color-scheme: light)` block — the right architecture,
+    wrong values. None of the PRD's specified hex codes (`#FFFFFF`/`#0F0F14`
+    background, `#E8500A` accent, etc.) appear anywhere in the repo today; it's a
+    different palette (`#111827`/`#FF5A1F`), not a close miss. Because the values
+    are already centralized in one file, swapping them is low-risk — no component
+    hardcodes a color outside `index.css`'s variables (confirmed: zero `dark:`
+    Tailwind variants exist, and `Button.tsx`/`Card.tsx`/`Tag.tsx` all reference
+    `var(--*)` tokens, not literals).
+  </Option>
+  <Option name="Keep current palette, add toggle only">
+    Less visual churn, but leaves the PRD's Section 1.4 table — which every other
+    part of the document treats as binding spec, not suggestion — permanently
+    unmet, and the "Bug v5.5" callout explicitly frames the missing toggle and
+    palette together as one open issue.
+  </Option>
+</Decision>
+
+<Steps>
+  <Step title="Manual theme control" reuses="src/index.css's existing CSS-variable structure">
+    Add a `ThemeProvider` (`src/lib/theme.tsx`) that reads/writes a
+    `tap_theme: 'light' | 'dark' | 'system'` `localStorage` key and sets
+    `document.documentElement.dataset.theme`. Rewrite `index.css`'s color block
+    into `:root[data-theme="light"]` / `:root[data-theme="dark"]` selectors (kept
+    behind a `:root:not([data-theme])` media-query fallback for `system`), with
+    every value replaced by the PRD 1.4 table. Add a Light/Dark/System segmented
+    control to `SettingsPage.tsx`, next to the existing "Supabase Status" row.
+  </Step>
+  <Step title="NumberPad component" reuses="Card/Button primitives, existing bottom-sheet pattern from DashboardPage's session-notes sheet">
+    Bottom-sheet with a 0-9 grid, backspace, and Done. Wire it as an `onClick` on
+    the number spans in `MatchActivePage.tsx` (`currentAScore`/`currentBScore`),
+    `DrillPage.tsx` (`currentMakes`, and the heat-size/target "Player Input"
+    quick-pick from the Drills section below), and the Banks margin stepper.
+  </Step>
+  <Step title="Player Picker Modal" reuses="usePlayers() (already real, already used by AttendancePage), Avatar/Card">
+    Build once, then replace: `NewSessionModal`'s free-text input, `ActiveDashboard`'s
+    inline add-player input, and wire it fresh into `DrillPage.tsx` setup Step 4
+    and a new pause-to-edit-roster affordance in `MatchActivePage.tsx`.
+  </Step>
+</Steps>
+
+## Sessions module (PRD §3)
+
+<Steps>
+  <Step title="Actually create Planned sessions" reuses="useSessions.ts's existing Session/insert shape">
+    Add `useCreatePlannedSession` (`sessions.insert({ state: 'planned', ... })`),
+    wired to Calendar's "tap a future date → +" flow (PRD 3.2). Today that flow
+    doesn't exist — `CalendarPage.tsx`'s only creation path
+    (`handleCreateAndOpen`) always sets `state: 'active'`, same as
+    `DashboardPage.tsx`'s `useOpenSession`.
+  </Step>
+  <Step title="Calendar month pills" reuses="Card/Tag styling, existing sessionDays lookup in CalendarPage.tsx">
+    Replace `.cal-dot` (`src/index.css:144-148`, a plain 5px dot) with a pill per
+    session showing `location` + duration (past) or "Planned" (future). Switch
+    `sessionDays: Set&lt;number&gt;` to `Map&lt;number, Session[]&gt;` so multiple
+    same-day sessions (PRD 3.7's Saturday two-gym pattern) each render their own
+    pill instead of collapsing to one dot.
+  </Step>
+  <Step title="Missed-session treatment" reuses="the same state field, no schema change">
+    Client-side only: `state === 'planned' && date &lt; today` renders a neutral
+    grey "Missed" pill instead of the orange "Planned" one in `stateColor()`
+    (`CalendarPage.tsx:71-75`). Never deleted, matches PRD 3.2.
+  </Step>
+  <Step title="Start Now / Review Details modal">
+    Tapping a Planned pill currently jumps straight to `AttendancePage.tsx`
+    (`CalendarPage.tsx:138-145`). Insert the two-option modal from PRD 3.3:
+    "Start Now" calls the existing `useActivateSession` directly; "Review
+    Details" opens an editable form (reuses the planned-session creation form)
+    before activating.
+  </Step>
+  <Step title="Ad-hoc-on-a-planned-day disambiguation">
+    In `DashboardPage.tsx`'s `handleConfirm` and `CalendarPage.tsx`'s
+    `handleCreateAndOpen`, check for an existing `state: 'planned'` session on the
+    target date before creating a new active one; if found, prompt "You have a
+    planned session at [location] today — is this it?" per PRD 3.3.
+  </Step>
+  <Step title="Location autocomplete">
+    `useLocationHistory()` feeding a `&lt;datalist&gt;` on both location inputs
+    (`NewSessionModal`, Calendar's quick-start sheet) — see the Data Model
+    Decision above for why this needs no new table.
+  </Step>
+  <Step title="Weekly recurrence" reuses="sessions.is_recurring / recurrence_weekday columns, already in the schema but dead">
+    On planned-session creation with recurrence on, insert a fixed batch (e.g. 8
+    weeks) of future `planned` rows sharing `recurrence_weekday`, rather than
+    standing up a cron — there's no serverless job infrastructure in this repo
+    beyond the existing GitHub Actions migration runner, and a fixed horizon is
+    simple to top up on next creation.
+  </Step>
+  <Step title="Session Recap: Highlight and To work on callouts" reuses="the already-defined but unused RecapCallout type (src/types/index.ts)">
+    `SessionRecapPage.tsx` today only renders a duration hero and a flat activity
+    list. Add the two missing PRD 8/Screen-5 callouts: Highlight (the same
+    closest-game/best-spot logic already computed for Match/Drill recaps,
+    surfaced at the session level) and To work on (worst drill spot relative to
+    its goal, if any drill happened that session).
+  </Step>
+</Steps>
+
+## Player profiles & shot chart (PRD §4)
+
+<Steps>
+  <Step title="Editable name, nickname, and shooting targets" reuses="useUpdatePlayer() (src/hooks/usePlayers.ts) — already written, has zero call sites today">
+    Add an edit affordance on `PlayerProfilePage.tsx` (tap-to-edit or a pencil
+    icon opening a sheet) for Name, Nickname, and the three target percentages.
+    The mutation already exists; nothing in the data layer needs to change.
+  </Step>
+  <Step title="Recent Activity Log (PRD 4.3)">
+    New `useRecentPlayerActivity(playerId, limit)` reading `activity_records` for
+    that player and resolving each row's `reference_id` against its
+    `activity_type` (match/drill/competitiveGame) for the per-type result line
+    (W/L + game count, shooting % + hand + volume, or finishing position). Render
+    as Activity Cards with a "View More" button that loads the next 10 in place
+    (PRD 4.3 / the open question in PRD §11 — see Questions below).
+  </Step>
+  <Step title="Real FT marker on the shot chart" reuses="the usePlayerShooting FT aggregate already computed and displayed elsewhere on this same page">
+    `ShotChart.tsx` currently calls `zoneColor(41, 50, 'ft')` with hardcoded
+    numbers regardless of the player. Pass the real `ftMakes`/`ftAttempts` already
+    fetched for the profile card's FT% bar.
+  </Step>
+  <Step title="Give the 5 orphaned zones real data">
+    `buildZones()` correctly renders all 15 PRD zones, but `ShotSpot` only has 5
+    values (`left0/left45/center/right45/right0`), so `spotZoneMap` can only ever
+    color the 10 mid-range/three-point zones — the restricted area and the 4
+    interior (block/post) zones permanently show mock numbers. Extend `ShotSpot`
+    with the missing positions, add them to the Drill setup spot-picker, and
+    extend `spotZoneMap` to cover all 15. (The mid-post/low-block color-threshold
+    categorization has a real ambiguity in the PRD text itself — see Questions.)
+  </Step>
+  <Step title="Spot History drill-down (PRD 4.4)">
+    No zone in `ShotChart.tsx` currently has an `onClick`. Add one that opens a
+    panel listing past `heat_entries` for that `(spot, hand)`, most recent first,
+    with each entry's date, location, session total, and heat-by-heat sequence.
+  </Step>
+  <Step title="Real per-format and Recreational W/L" reuses="the games/matches join pattern already used by usePlayerShooting's drill:drills(shot_type) embed">
+    New `usePlayerWLByFormat(playerId)` (join `games` to `matches(format)`,
+    group client-side) replaces `WinLossPage.tsx`'s hardcoded `DATA` array. Fix
+    the page to actually read `useParams&lt;{id}&gt;()` — it currently ignores the
+    route param entirely, so every player sees the identical fake numbers, and
+    its back button is hardcoded to `/players/1`. Recreational record aggregates
+    `competitive_results` for game types `banks`/`next`/`generic` only — Middies'
+    PRD-defined career stat is Mid-Range %, not W/L (PRD 6.2 vs 6.1/6.3/6.4), so
+    it must not feed this number.
+  </Step>
+  <Step title="W-L pill on the roster list" reuses="usePlayerWL, already real and already used on PlayerProfilePage">
+    Fills the "wasted space" bug from PRD 12.1 and gives `PlayersPage.tsx`'s rows
+    the record at a glance without opening a profile.
+  </Step>
+</Steps>
+
+## Matches module (PRD §5)
+
+<Decision question="Team reassignment and Banks elimination order: real drag-and-drop, or tap-based?">
+  <Option name="Tap-to-cycle / tap-to-sequence, no drag library" picked>
+    `matchStore.ts` already exports `movePlayer(playerId, to: 'A'|'B'|'sub')` —
+    it's simply never called from `MatchSetupPage.tsx`. Wiring it as "tap a chip
+    to cycle Team A → Team B → Sub" gets the exact same end state as drag with
+    zero new dependencies and no mobile-Safari touch-drag reliability risk. Banks'
+    "drag-to-rank" becomes tap-in-elimination-order (tap 1st eliminated, then
+    2nd, ...; the app assigns rank from tap sequence) — same data, same principle.
+  </Option>
+  <Option name="Real drag-and-drop (pointer-based DnD library)">
+    Closer to the PRD's literal "drag" wording, but adds a dependency and touch
+    reliability edge cases (accidental drags mid-game, scroll-vs-drag conflicts)
+    against a P4 (speed over completeness) app used one-handed courtside. The tap
+    sequence produces an identical data model with none of that risk.
+  </Option>
+</Decision>
+
+<Canvas title="Match Setup — scoring style and team assignment">
+  <Screen label="Scoring style (reordered per PRD 12.6)" surface="mobile" url="tap.app/match/setup"
+    note="Today Target/Wave render as two dead tabs, always defaulting to Target with a plain +/- stepper. This flips the order per PRD 12.6 and shows only the relevant input."
+    html={`
+<div style="display:flex;flex-direction:column;gap:14px;padding:16px;height:100%">
+  <h2 style="margin:0">New Match — 3v3</h2>
+  <div>
+    <small class="wf-muted">SCORING STYLE</small>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="primary" style="flex:1">Target Score</button>
+      <button style="flex:1">Duration Wave</button>
+    </div>
+  </div>
+  <div>
+    <small class="wf-muted">TARGET POINTS</small>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button>7</button><button class="primary">11</button><button>21</button><button>Other</button>
+    </div>
+  </div>
+  <div class="wf-divider"></div>
+  <small class="wf-muted">PLAYERS PRESENT</small>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <span class="wf-pill">Jordan</span><span class="wf-pill">Marcus</span><span class="wf-pill">JC</span>
+    <span class="wf-pill">Dre</span><span class="wf-pill">Tomas</span><span class="wf-pill">Sef</span>
+  </div>
+</div>`} />
+  <Screen label="Team assignment — tap to cycle" surface="mobile" url="tap.app/match/setup"
+    note="Tapping any chip cycles it A -> B -> Sub -> A, calling the existing movePlayer action. Shuffle/Re-shuffle stay as the fast path; this is the manual override PRD 5.2 asks for."
+    html={`
+<div style="display:flex;flex-direction:column;gap:12px;padding:16px;height:100%">
+  <div style="display:flex;gap:8px">
+    <button style="flex:1">Shuffle</button><button style="flex:1">Re-shuffle</button>
+  </div>
+  <div class="wf-card">
+    <small class="wf-muted">TEAM A</small>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <span class="wf-pill accent">Jordan</span><span class="wf-pill accent">Marcus</span><span class="wf-pill accent">JC</span>
+    </div>
+  </div>
+  <div class="wf-card">
+    <small class="wf-muted">TEAM B</small>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <span class="wf-pill">Dre</span><span class="wf-pill">Tomas</span><span class="wf-pill">Sef</span>
+    </div>
+  </div>
+  <div class="wf-card">
+    <small class="wf-muted">SUB QUEUE</small>
+    <p class="wf-muted" style="margin:6px 0 0">Tap a player above to move them here</p>
+  </div>
+  <button class="primary">Start Match</button>
+</div>`} />
+</Canvas>
+
+<Steps>
+  <Step title="Make Duration Wave a real mode" reuses="ScoringStyle type and scoringStyle store field — already correct, just unwired">
+    Wire the Target/Wave tab `onClick`s to `setScoringStyle`; conditionally render
+    the Target quick-picks (7/11/21 + free input) or a Duration input (10/20 min
+    + free input, countdown, and an audio alarm at zero) — never both, per PRD
+    5.1. Remove the hardcoded `scoring_style: 'targetScore'` in `handleStart`.
+  </Step>
+  <Step title="Wire manual team reassignment">
+    Call `movePlayer` from tap handlers on the Team A/B/Sub chips per the
+    Decision above.
+  </Step>
+  <Step title="Possession / Winners Ball highlight">
+    Add a possession indicator (border or icon) on the team panel that won the
+    last game, per PRD 5.3's Winners Ball rule.
+  </Step>
+  <Step title="Pause + mid-game roster edit" reuses="the Player Picker Modal from Global UI Primitives">
+    `MatchActivePage.tsx`'s roster button (`Icons.roster`) currently has no
+    `onClick`. Wire it to pause the timer and open the picker for late
+    arrivals/injury subs, then resume with state intact (PRD 5.5).
+  </Step>
+  <Step title="Tie-breaker rule" reuses="completedGames already available in the store, same array MatchRecapPage reads today">
+    Compute aggregate point differential across all games when game-win counts
+    tie; otherwise Draw. The exact tie-break math has a genuine PRD wording
+    ambiguity — see Questions.
+  </Step>
+  <Step title="Quick Rematch with roster continuity" reuses="matchStore.reset(), which already preserves format by omission">
+    Add `resetForRematch()` that clears scores/`completedGames`/timer but keeps
+    `format`/`teamA`/`teamB`/`subQueue`, landing on `MatchSetupPage` pre-filled
+    and still editable — today's full `reset()` wipes the roster entirely.
+  </Step>
+  <Step title="Dominance and Best side recap callouts" reuses="the same completedGames data MatchRecapPage already reduces for Closest/Longest">
+    Dominance: the team with more game wins, average margin across those wins.
+    Best side: the player present on the winning team the most games, derived
+    from each `CompletedGame`'s `teamAPlayerIds`/`teamBPlayerIds`.
+  </Step>
+</Steps>
+
+## Competitive games module (PRD §6)
+
+`CompetitiveSetupPage.tsx` collects `gameType`/spot/players and then discards all
+of it — only Banks even navigates anywhere meaningful, and `BanksPage.tsx` is a
+fully hardcoded 5-player mock with a decorative (non-functional) drag handle.
+Middies, Next, and Generic have no data-entry screen at all despite the schema
+(`competitive_games`, `competitive_results`) already covering all four types
+column-for-column.
+
+<Steps>
+  <Step title="competitiveStore.ts" reuses="the same ephemeral-Zustand-store pattern as drillStore.ts and matchStore.ts">
+    Carries `gameType`/`spot`/`quotaPerPlayer`/`customName`/`playerIds` from setup
+    into whichever activity screen handles that type, replacing the current
+    silent drop between `CompetitiveSetupPage` and `BanksPage`.
+  </Step>
+  <Step title="Banks: real data, tap-to-sequence elimination" reuses="the tap-sequence Decision from Matches">
+    Replace the hardcoded `PLAYERS` array with the real session roster from the
+    store; replace the decorative grip-drag rows with tap-in-elimination-order;
+    persist to `competitive_games` (`game_type: 'banks'`) +
+    `competitive_results` (`rank`, `score` for winner's margin) on save, instead
+    of the current `nav('/match/recap')` no-op.
+  </Step>
+  <Step title="Middies screen" reuses="the same spot-picker already shared with Banks in CompetitiveSetupPage">
+    New post-game makes-per-player entry grid (tap a number to open the
+    NumberPad); rank computed client-side by makes descending; persists makes +
+    rank to `competitive_results`. Feeds Mid-Range % per spot, not Recreational
+    W/L (PRD 6.2).
+  </Step>
+  <Step title="Next screen">
+    Target-makes quick-pick (default 10, adjustable) at setup, then the same
+    post-game count-entry grid as Middies; feeds Recreational W/L only.
+  </Step>
+  <Step title="Generic activity">
+    Wire the already-existing `CompetitiveGame.custom_name` field to a text input
+    in setup (currently unused despite being in the schema/type); ranking uses
+    the same tap-sequence entry as Banks.
+  </Step>
+</Steps>
+
+## Drills module (PRD §7)
+
+The setup wizard, spot-sequential engine, and heat-commit logic are largely
+built — this is a wiring and completeness pass, not a rebuild, apart from the
+data-integrity fix called out at the top of this plan.
+
+<Canvas title="Live Drill Screen">
+  <Screen label="Active shooter always visible" surface="mobile" url="tap.app/drill"
+    note="Today the makes counter is the largest element but not full-bleed, and there's no player name anywhere because players[] is always empty. This makes the shooter the first thing you read, and adds the missing Next Spot button."
+    html={`
+<div style="display:flex;flex-direction:column;height:100%">
+  <div style="padding:12px 16px;border-bottom:1.3px solid var(--wf-line);display:flex;justify-content:space-between">
+    <span>Three-Point · Right hand</span><span class="wf-pill">Spot 2 of 4</span>
+  </div>
+  <div style="padding:10px 16px;display:flex;gap:6px">
+    <span class="wf-pill accent">Left 45°</span><span class="wf-pill">Center</span><span class="wf-pill">Right 45°</span><span class="wf-pill">Right 0°</span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px">
+    <h1 style="margin:0">Marcus shooting</h1>
+    <div style="display:flex;align-items:center;gap:22px">
+      <button style="width:60px;height:60px;border-radius:50%;font-size:22px">−</button>
+      <div style="font-size:64px;font-weight:700;line-height:1">7<small style="font-size:28px;color:var(--wf-muted)">/10</small></div>
+      <button class="primary" style="width:60px;height:60px;border-radius:50%;font-size:22px">+</button>
+    </div>
+    <small class="wf-muted">Heats · Left 45° — H1: 8/10 · H2: 6/10</small>
+  </div>
+  <div style="padding:14px;border-top:1.3px solid var(--wf-line);display:flex;gap:8px">
+    <button style="flex:1">Next Spot</button>
+    <button class="primary" style="flex:2">Save Heat &amp; Next</button>
+  </div>
+</div>`} />
+</Canvas>
+
+<Steps>
+  <Step title="Wire the Player Picker Modal into setup Step 4" reuses="the shared modal from Global UI Primitives; drillStore.setPlayers, which already exists and is already correct — it's just never called">
+    This is the data-integrity fix. Replace the "coming soon" placeholder in
+    `DrillPage.tsx` with the picker, calling `setPlayers(selected)`. Everything
+    downstream (round-robin rotation, `heat.playerId`) already works correctly
+    once this array is populated.
+  </Step>
+  <Step title="Active shooter display and manual override">
+    Show `players[currentPlayerIndex]` prominently (see Canvas above); add a tap
+    target on the roster strip to jump the active index manually, per PRD 7.1a.
+  </Step>
+  <Step title="Solo vs Group branching" reuses="players.length, now meaningful once Step 4 is wired">
+    `mode = players.length &lt;= 1 ? 'solo' : 'group'`. Group hides the
+    session-target step entirely (fixed attempt quota only, per PRD 7.3's "make-
+    targets create unacceptable wait times"); Solo keeps the optional target.
+  </Step>
+  <Step title="Heat-size and target quick-picks to spec" reuses="the NumberPad for 'Player Input'">
+    Replace the current fixed grids (`[5,8,10,12,15,20]` for heat size,
+    `[5,8,10,15,20]` for target) with the PRD's actual quick-picks: heat size
+    5/10/Player Input/Manual; target 10/50/100/Player Input/None. Manual mode has
+    no fixed size — Next Spot auto-saves whatever was tallied.
+  </Step>
+  <Step title="Add a distinct Next Spot button" reuses="the existing spot-advance logic inside commitHeat, split out">
+    Today only "Save Heat &amp; Next" exists — there's no way to move on before a
+    target is hit without also logging another heat. Add Next Spot per PRD 7.2's
+    navigation rule (available after ≥1 heat on the current spot).
+  </Step>
+  <Step title="Pause mid-heat" reuses="the Player Picker Modal">
+    Same pattern as the Matches pause: open the picker without losing
+    `completedHeats`/`currentMakes`, which are already safe in the Zustand store.
+  </Step>
+  <Step title="Full breakdown table on DrillRecapPage" reuses="completedHeats, now correctly tagged with real player IDs">
+    Players × spots grid, heat-by-heat sequence per cell, totals row and column
+    (PRD 7.5). Add the two missing callouts (Efficiency, Heat trend) alongside
+    the existing three (rename to the PRD's "Spot best"/"Spot to work" labels).
+  </Step>
+  <Step title="Shot-type to career-stat rollup" reuses="usePlayerStats.ts's usePlayerShooting reduce loop">
+    Extend the `type === 'midRange'` branch to also match `layup`/`floater`/
+    `postUp`, rolling all three into the same Mid-Range Interior bucket per PRD
+    7.4, instead of the current 3-bucket (FT/Mid/3PT) reduction ignoring them.
+  </Step>
+</Steps>
+
+## Sheets export (PRD §9)
+
+<Callout tone="risk" label="Credential exposure, not just a spec gap">
+`src/lib/sheetsExport.ts`'s `handleOAuthCallback` sends
+`client_secret: CLIENT_SECRET!` (from `VITE_GOOGLE_CLIENT_SECRET`) directly from
+the browser to Google's token endpoint. Any `VITE_*` env var ships in the
+client bundle — this secret is currently readable by anyone who opens dev tools
+on the deployed app. This needs a server-side hop before anything else in this
+section, independent of the PRD gap analysis below.
+</Callout>
+
+<Steps>
+  <Step title="Move the OAuth token exchange server-side" reuses="Vercel, already the deploy target — a serverless function needs no new hosting">
+    Add a Vercel serverless function (e.g. `api/google-oauth-callback.ts`) that
+    holds `GOOGLE_CLIENT_SECRET` as a server-only env var and does the token
+    exchange; the client posts the auth code to this endpoint instead of calling
+    Google directly with the secret.
+  </Step>
+  <Step title="Sheet selection, not just creation">
+    `exportToSheets()` always creates a new spreadsheet on first export. Add a
+    picker (Google Picker API or a simple "paste a Sheet URL" fallback) so PRD
+    9.1's "selects or creates" is both, not just creates.
+  </Step>
+  <Step title="Fix the 6-vs-7 tab mismatch">
+    Code writes 7 tabs (`Sessions, Matches, Games, Competitive Games, Drills,
+    Players, Career Stats`); the PRD and the UI copy both say 6. Recommend
+    folding `Games` into the `Matches` tab (each match's rows followed by its
+    game rows) rather than dropping data — see Questions.
+  </Step>
+  <Step title="True background export + offline queue" reuses="the syncWorker.ts polling pattern already built for Supabase sync">
+    Today `doExport()` is an awaited promise inside the button handler — leaving
+    the page mid-export aborts it. Move it into a durable queued job (reusing the
+    existing IndexedDB queue infrastructure) so it survives navigation, and so
+    PRD 9.3's "queued while offline, fires automatically on reconnect" is real.
+  </Step>
+</Steps>
+
+## Offline sync consistency (PRD §1.3)
+
+<Decision question="Extend the IndexedDB-queue pattern to every mutation, or leave it scoped to the three call sites that use it today?">
+  <Option name="Extend db.ts's dbInsert/dbUpdate/dbDelete to usePlayers.ts and useSessions.ts" picked>
+    Today only three call sites go through the offline queue at all:
+    `matchStore.endGame()`, `drillStore.commitHeat()`, and
+    `sessionStore.setNotes()`. Every player mutation (`useAddPlayer`,
+    `useUpdatePlayer`, `useDeletePlayer`) and every session-lifecycle mutation
+    (`useOpenSession`, `useEndSession`, `useActivateSession`) calls
+    `supabase.from(...)` directly — if offline, these simply throw with no
+    retry. PRD 1.3 says "all user interactions write to a local queue first,"
+    and right now most don't. Routing these through `dbInsert`/`dbUpdate` costs
+    a signature change per call site, not new infrastructure — the queue,
+    worker, and `StatusDot` already exist and already work correctly for the
+    three sites that use them.
+  </Option>
+  <Option name="Leave as-is; only the three highest-frequency-in-a-gym writes need it">
+    Cheaper, but a scribe adding a walk-in player or ending a session while the
+    gym wifi is down — exactly the scenario PRD 1.3 exists for — currently just
+    fails with no recovery.
+  </Option>
+</Decision>
+
+<Steps>
+  <Step title="Route usePlayers.ts and useSessions.ts mutations through db.ts" reuses="dbInsert/dbUpdate/dbDelete, unchanged">
+    Swap each mutation's direct `supabase.from(...)` call for the matching
+    `dbInsert`/`dbUpdate`/`dbDelete`, matching the pattern already proven in the
+    three existing call sites.
+  </Step>
+  <Step title="Offline read path" reuses="the idb dependency already in package.json">
+    None of the `useQuery` reads (`usePlayers`, `useSessions`, etc.) have a local
+    mirror today — offline reads currently just fail/hang. Add a lightweight
+    IndexedDB read cache populated on successful fetch, served when offline, so
+    the UI has something to show (even if stale) per PRD 1.3's "UI always reads
+    from local state."
+  </Step>
+</Steps>
+
+## Bug fixes — v5.5 / v5.6 (PRD §12)
+
+Cross-checked against the actual components rather than assumed from the PRD's
+descriptions — two of the six areas turned out to already be fixed.
+
+| Area | PRD says | Actual finding |
+| --- | --- | --- |
+| Global dark-mode button text | Any non-white text on a button is a bug | **Already clean.** `Button.tsx`'s five variants (primary/secondary/ghost/danger/icon) use white, chalk, or red-on-red-tint — no blue anywhere. The retheme above should keep it that way, not re-introduce it. |
+| Card/pill/button padding | No text touching a border | **Already clean.** Every `Card`/`Tag` variant has explicit non-zero padding; no `p-0`/zero-gap pattern found outside one intentional inline "back" link. |
+| 12.1 Players — Roster screen | Wider search bar, spacing, pill shows Name not two-letter nickname, W/L pill | Real gaps: rows show nickname (bold) + full name already close, but no W-L pill — folded into the Player Profile section's "W-L pill on the roster list" step above. |
+| 12.2 Player Card screen | Name/nickname editable, header pill/padding | Real gap — folded into "Editable name, nickname, and shooting targets" above. |
+| 12.3 Calendar screen | Pills not dots, gaps between day squares, tap behavior | Real gap — folded into "Calendar month pills" and the Start Now/Review Details steps above. |
+| 12.4/12.5 Player picker (session start & live session) | Persistent modal, not free text | Real gap — this is exactly the Player Picker Modal built once in Global UI Primitives. |
+| 12.6 New Match setup order | Scoring style first, Players section, Shuffle/Re-shuffle/manual | Real gap — folded into the Matches "Make Duration Wave a real mode" and "Wire manual team reassignment" steps above. |
+| 12.7 Light/Dark toggle | Add toggle, verify light mode | Real gap — this is the Global UI Primitives theme Decision and Step above. |
+
+## Not doing
+
+Carried forward from PRD §10, plus one plan-scoped deferral:
+
+- **Player photos.** Deferred to v2 per PRD — Supabase free-tier storage limit.
+- **Fairness-weighted randomizer.** Needs session history volume that doesn't exist yet.
+- **Session goals/intentions, date-range filters, charts/trend visualization, cross-session heat trend aggregates, catch-and-shoot tagging, Apple Watch, friends'-data ingestion.** All explicitly deferred in PRD §10 — no reason to pull any forward.
+- **Interior shot sub-parameters (approach/finish/footwork).** PRD defers these; this plan's shot-type rollup (Drills section) only fixes the existing 3-bucket career stat, it doesn't add new sub-tagging.
+- **A full local-first read cache with conflict UI.** The Offline Sync section above adds a queue for writes and a basic read cache for the offline case, but a richer merge/conflict-preview UI is out of scope — there's no concurrent-writer scenario to justify it (see the LWW Decision above).
+
+## Verification
+
+- **Drills data-integrity fix:** after wiring Step 4, run a 2-player group drill
+  and confirm both `heat_entries.player_id` values in Supabase are real UUIDs,
+  not `''`. This is the single most important check in this plan.
+- **Duration Wave mode:** start a match, switch to Wave, confirm the Target
+  input disappears and a running countdown with an audible alarm at zero
+  appears; confirm `matches.scoring_style` persists as `'durationWave'`.
+- **Offline queue extension:** toggle devtools offline, add a new player and end
+  a session, confirm both appear in `getPendingCount()` and `StatusDot` shows
+  "Offline"; go back online and confirm both rows land in Supabase within one
+  30s poll cycle.
+- **Theme toggle:** set System/Light/Dark in Settings, reload the page, confirm
+  the choice survives (localStorage) and every screen — not just Dashboard —
+  renders the corresponding palette with no contrast regressions.
+- **Shot chart taxonomy:** log a drill heat at a newly-added spot (e.g. left
+  block) and confirm its zone on `ShotChart.tsx` updates from the mock number to
+  the real make/attempt count.
+- **WinLossPage:** open two different players' `/players/:id/wl` and confirm the
+  numbers differ and match each player's actual `games` history.
+
+<Questions>
+  <Question id="tab-count" title="Sheets export: fold Games into Matches (6 tabs), or update the PRD/UI copy to say 7?"
+    detail="Code already writes a separate Games tab beyond the PRD's 6-tab list. Folding it into Matches keeps the PRD's number but changes the Matches tab's row shape; keeping 7 tabs is less work but means the PRD text and UI copy both need a one-word edit."
+    recommended="Fold Games into Matches"
+    options={[
+      {label:"Fold Games into Matches", detail:"Matches spec's tab count; each match's rows followed by its per-game rows."},
+      {label:"Keep 7 tabs, update copy", detail:"Less engineering, but the PRD and in-app 'Overwrites all 6 tabs' copy both need fixing."}
+    ]} />
+  <Question id="mid-post-threshold" title="Do the two interior 'low block' zones use Paint thresholds or Mid-Range thresholds?"
+    detail="PRD 4.4's zone-group table lists 'Interior Mid-Range (2): Left/Right low block' as distinct from 'Mid-Post (2)', but the color-threshold table only defines 'Mid-Range (incl. mid-post)' and 'Paint/Interior' as categories — low block isn't named in either. Current code types low-block zones as 'paint' (mid-post as 'mid'), which this plan leaves unchanged absent a correction."
+    recommended="Keep current: low block = paint thresholds, mid-post = mid-range thresholds"
+    options={[
+      {label:"Keep current (low block = paint, mid-post = mid)", detail:"Low block is physically closer to the rim than mid-post; paint-style thresholds (80/51/≤50) fit that shot difficulty better."},
+      {label:"Move low block to Mid-Range thresholds too", detail:"Groups everything the PRD's zone table calls '...Mid-Range' under one threshold set, even though low block sits inside the restricted-area radius."}
+    ]} />
+  <Question id="tie-break-math" title="Match tie-breaker: PRD 5.3 says 'smallest aggregate point differential' decides the winner when game-wins tie — smallest doesn't obviously pick a winner. What's the intended math?"
+    detail="A smaller differential reads as 'closer,' not 'more dominant' — the more natural tie-break would be largest cumulative point differential favoring the team ahead. This plan implements largest-aggregate-diff-wins, Draw if still equal, but the PRD's literal wording says the opposite."
+    recommended="Largest aggregate point differential wins; Draw if equal"
+    options={[
+      {label:"Largest aggregate differential wins", detail:"Team ahead on cumulative points across all games takes the match when game-wins are tied."},
+      {label:"Follow the PRD literally: smallest differential wins", detail:"Implements the text as written, even though it rewards the closer-scoring team over the more dominant one."}
+    ]} />
+  <Question id="activity-log-cap" title="PRD §11: does 'View More' on the player activity log cap out, or load indefinitely?"
+    detail="Carried directly from the PRD's own open question. Affects whether useRecentPlayerActivity needs a hard limit param or true infinite offset pagination."
+    recommended="No cap for v1"
+    options={[
+      {label:"No cap — always load all", detail:"Simplest; matches PRD 3.9's 'available for all past sessions without limit' precedent."},
+      {label:"Cap at a fixed number (e.g. 50)", detail:"Bounds query cost for very long-tenured players, at the cost of a dead-end 'View More' button."}
+    ]} />
+  <Question id="recap-auto-show" title="PRD §11: is Session Recap shown automatically on End Session, or opt-in?"
+    detail="Carried directly from the PRD's own open question — affects whether ending a session always navigates to the recap route or leaves that as a link from the dashboard."
+    recommended="Automatic"
+    options={[
+      {label:"Automatic on End Session", detail:"Matches the existing MatchRecapPage/DrillRecapPage precedent — both already show automatically on their respective 'End' actions."},
+      {label:"Opt-in from Dashboard", detail:"Less friction ending a session quickly, but breaks the pattern every other recap screen already follows."}
+    ]} />
+</Questions>

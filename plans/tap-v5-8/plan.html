@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; form-action 'none'">
+<title>TAP v5.8 gap-closure plan</title>
+<style>/* local-plan — self-contained plan stylesheet. No webfonts, no external assets. */
+
+:root {
+  --paper:#F2F4F3; --card:#FFFFFF; --ink:#16211F; --muted:#5E6E6A;
+  --line:#D3DAD7; --line-soft:#E4E9E7; --accent:#0B5E4E; --accent-soft:#E2EFEA;
+  --redline:#B02E1E; --redline-soft:#F7E6E2; --shadow:0 1px 2px rgba(22,33,31,.06);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --serif:ui-serif,Georgia,"Iowan Old Style","Times New Roman",serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --measure:70ch; --rail:230px;
+}
+[data-theme="dark"] {
+  --paper:#101413; --card:#171C1B; --ink:#E4EAE7; --muted:#90A099;
+  --line:#27302E; --line-soft:#1E2523; --accent:#4FBFA0; --accent-soft:#16302A;
+  --redline:#E4705C; --redline-soft:#33201C; --shadow:none;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --paper:#101413; --card:#171C1B; --ink:#E4EAE7; --muted:#90A099;
+  --line:#27302E; --line-soft:#1E2523; --accent:#4FBFA0; --accent-soft:#16302A;
+  --redline:#E4705C; --redline-soft:#33201C; --shadow:none; }}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} *{animation:none!important;transition:none!important} }
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 var(--sans);
+  -webkit-font-smoothing:antialiased;padding-bottom:64px}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:48px;
+  max-width:1200px;margin:0 auto;padding:0 32px}
+.doc{min-width:0;max-width:var(--measure);padding:56px 0 120px}
+.doc.wide{max-width:none}
+
+/* ---------- spine (signature element) ---------- */
+.rail{position:sticky;top:0;align-self:start;height:100vh;padding:56px 0 32px;
+  overflow-y:auto;border-right:1px solid var(--line-soft)}
+.rail-title{font:600 11px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 16px}
+.spine{list-style:none;margin:0;padding:0;position:relative}
+.spine::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:1px;background:var(--line)}
+.spine a{position:relative;display:block;padding:7px 16px 7px 28px;text-decoration:none;
+  color:var(--muted);font-size:13.5px;line-height:1.4;border-radius:0 4px 4px 0}
+.spine a::before{content:"";position:absolute;left:3px;top:14px;width:9px;height:9px;border-radius:50%;
+  background:var(--paper);border:1.5px solid var(--line)}
+.spine a:hover{color:var(--ink)}
+.spine a.on{color:var(--ink);font-weight:600}
+.spine a.on::before{background:var(--accent);border-color:var(--accent)}
+.spine a.flag::after{content:"";position:absolute;left:0;top:12px;width:2px;height:14px;background:var(--redline)}
+.rail-foot{margin-top:24px;padding:0 16px}
+.rail-foot button{font:500 12px var(--sans);color:var(--muted);background:none;
+  border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+.rail-foot button:hover{color:var(--ink);border-color:var(--muted)}
+
+/* ---------- head ---------- */
+.plan-head{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:44px}
+.eyebrow{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 14px}
+.plan-head h1{font:600 40px/1.15 var(--serif);letter-spacing:-.015em;margin:0 0 14px}
+.lede{font-size:18.5px;line-height:1.55;color:var(--muted);margin:0 0 20px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 20px;list-style:none;margin:0;padding:0;
+  font:500 12px var(--mono);color:var(--muted)}
+.meta b{color:var(--ink);font-weight:600}
+
+/* ---------- prose ---------- */
+.doc h2{font:600 25px/1.25 var(--serif);letter-spacing:-.01em;margin:52px 0 4px;scroll-margin-top:24px}
+.doc h3{font:600 17px/1.35 var(--sans);margin:34px 0 6px;scroll-margin-top:24px}
+.doc h4{font:600 14px/1.4 var(--sans);margin:24px 0 4px;color:var(--muted)}
+.doc p{margin:12px 0}
+.doc ul,.doc ol{margin:12px 0;padding-left:22px}
+.doc li{margin:5px 0}
+.doc a{color:var(--accent);text-underline-offset:2px}
+.doc strong{font-weight:650}
+.doc hr{border:0;border-top:1px solid var(--line);margin:44px 0}
+.doc blockquote{margin:16px 0;padding:2px 0 2px 18px;border-left:2px solid var(--line);color:var(--muted)}
+.doc :not(pre)>code{font:500 .875em var(--mono);background:var(--line-soft);
+  padding:.12em .38em;border-radius:4px}
+.doc table{width:100%;border-collapse:collapse;margin:18px 0;font-size:14.5px}
+.doc th,.doc td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+.doc th{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* section anchor + redline gutter */
+.sec{position:relative}
+.sec>h2{padding-right:34px}
+.mark{position:absolute;right:-36px;top:56px;width:26px;height:26px;border-radius:6px;
+  border:1px solid transparent;background:none;color:var(--muted);cursor:pointer;
+  opacity:0;font:600 13px var(--mono);line-height:1}
+.sec:hover .mark,.mark.has{opacity:1}
+.mark:hover{border-color:var(--line);color:var(--ink)}
+.mark.has{color:var(--redline);border-color:var(--redline)}
+
+/* ---------- blocks ---------- */
+.block{margin:22px 0;border:1px solid var(--line);border-radius:10px;background:var(--card);
+  box-shadow:var(--shadow);overflow:hidden}
+.block-head{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  border-bottom:1px solid var(--line-soft);background:var(--line-soft)}
+.block-kind{font:600 10px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.block-name{font:600 13px var(--mono);color:var(--ink)}
+.block-body{padding:14px}
+
+/* callout */
+.callout{display:grid;grid-template-columns:auto 1fr;gap:12px;margin:20px 0;padding:13px 16px;
+  border-radius:8px;background:var(--accent-soft);border:1px solid transparent;font-size:15px}
+.callout .tag{font:600 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);padding-top:3px;white-space:nowrap}
+.callout p{margin:0}
+.callout[data-tone="risk"]{background:var(--redline-soft)}
+.callout[data-tone="risk"] .tag{color:var(--redline)}
+.callout[data-tone="note"]{background:var(--line-soft)}
+.callout[data-tone="note"] .tag{color:var(--muted)}
+
+/* steps */
+.steps{counter-reset:s;list-style:none;margin:20px 0;padding:0}
+.step{counter-increment:s;position:relative;padding:0 0 20px 40px;border-left:1px solid var(--line);
+  margin-left:11px}
+.step:last-child{border-left-color:transparent;padding-bottom:0}
+.step::before{content:counter(s);position:absolute;left:-12px;top:0;width:23px;height:23px;
+  border-radius:50%;background:var(--card);border:1px solid var(--line);color:var(--muted);
+  font:600 11px/21px var(--mono);text-align:center}
+.step>h4{margin:1px 0 4px;color:var(--ink);font-size:15px}
+.step .reuse{font:500 12px var(--mono);color:var(--accent);display:block;margin-bottom:6px}
+.step p{margin:4px 0;font-size:15px}
+
+/* decision */
+.opts{display:grid;gap:10px;margin:14px 0}
+.opt{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--card)}
+.opt[data-picked="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.opt-h{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+.opt-h b{font-size:15px}
+.opt-h .badge{font:600 9.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);border:1px solid currentColor;border-radius:99px;padding:1.5px 7px}
+.opt p{margin:3px 0;font-size:14.5px;color:var(--muted)}
+
+/* file tree */
+.tree{font:13.5px/1.85 var(--mono);margin:0;white-space:pre;overflow-x:auto}
+.tree .t-new{color:var(--accent);font-weight:600}
+.tree .t-edit{color:var(--redline)}
+.tree .t-note{color:var(--muted);font-weight:400}
+
+/* code */
+pre.code{margin:0;padding:14px;overflow-x:auto;font:13.5px/1.6 var(--mono);background:var(--card)}
+.doc pre.code code{background:none;padding:0;font-size:inherit}
+.acode{display:grid;grid-template-columns:1fr 250px;gap:0}
+.acode>pre{border-right:1px solid var(--line-soft)}
+.acode-notes{padding:12px 14px;font-size:13.5px;background:var(--line-soft)}
+.acode-notes div{margin-bottom:12px}
+.acode-notes b{display:block;font:600 11px var(--mono);color:var(--accent)}
+.diff{margin:0;padding:14px;overflow-x:auto;font:13.5px/1.55 var(--mono)}
+.diff .a{background:var(--accent-soft);display:block;margin:0 -14px;padding:0 14px}
+.diff .d{background:var(--redline-soft);display:block;margin:0 -14px;padding:0 14px}
+.diff .c{color:var(--muted);display:block}
+
+/* data model / api */
+.fields{width:100%;border-collapse:collapse;font-size:14px}
+.fields td{padding:6px 10px;border-bottom:1px solid var(--line-soft)}
+.fields td:first-child{font:600 13px var(--mono);white-space:nowrap}
+.fields td:nth-child(2){font:13px var(--mono);color:var(--accent);white-space:nowrap}
+.fields td:last-child{color:var(--muted)}
+.fields tr:last-child td{border-bottom:0}
+.verb{font:700 10px var(--mono);letter-spacing:.08em;padding:2.5px 7px;border-radius:4px;
+  background:var(--accent);color:var(--card)}
+[data-theme="dark"] .verb{color:var(--paper)}
+.path{font:600 13px var(--mono)}
+
+/* ---------- canvas + wireframes ---------- */
+.canvas{margin:26px 0;border:1px solid var(--line);border-radius:10px;background:var(--line-soft);
+  padding:22px;overflow-x:auto}
+.canvas-head{display:flex;align-items:baseline;gap:12px;margin-bottom:18px}
+.canvas-head h4{margin:0;font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.frames{display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start}
+.frame{display:flex;flex-direction:column;gap:8px}
+.frame-label{font:600 12px var(--mono);color:var(--ink)}
+.frame-note{max-width:260px;font-size:13px;line-height:1.5;color:var(--muted);
+  border-left:2px solid var(--redline);padding-left:10px}
+
+.wf{--wf-paper:#FFFFFF;--wf-card:#FAFAFA;--wf-ink:#1B1D1C;--wf-muted:#8A918E;
+  --wf-line:#C9CFCC;--wf-accent:#0B5E4E;--wf-radius:5px;
+  background:var(--wf-paper);color:var(--wf-ink);border:1.4px solid var(--wf-line);
+  border-radius:8px;overflow:hidden;font:13px/1.45 var(--sans);flex:none;position:relative}
+[data-theme="dark"] .wf{--wf-paper:#1B211F;--wf-card:#222826;--wf-ink:#DDE4E1;
+  --wf-muted:#7E8B87;--wf-line:#3A4441;--wf-accent:#4FBFA0}
+.wf[data-surface="mobile"]{width:320px;height:600px}
+.wf[data-surface="tablet"]{width:620px;height:760px}
+.wf[data-surface="browser"]{width:760px;height:500px}
+.wf[data-surface="desktop"]{width:980px;height:620px}
+.wf[data-surface="card"]{width:380px;height:auto;min-height:150px}
+.wf-inner{height:100%;overflow:hidden}
+.wf[data-surface="browser"] .wf-inner,.wf[data-surface="mobile"] .wf-inner{height:calc(100% - 30px)}
+.wf-bar{height:30px;display:flex;align-items:center;gap:6px;padding:0 10px;
+  border-bottom:1.4px solid var(--wf-line);background:var(--wf-card);font:11px var(--mono);color:var(--wf-muted)}
+.wf-dot{width:8px;height:8px;border-radius:50%;border:1.2px solid var(--wf-line)}
+.wf-url{flex:1;height:16px;border:1.2px solid var(--wf-line);border-radius:99px;
+  background:var(--wf-paper);padding:0 8px;font:10.5px/15px var(--mono);color:var(--wf-muted);
+  overflow:hidden;white-space:nowrap}
+.wf-statusbar{height:30px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;font:600 11px var(--mono);color:var(--wf-ink)}
+
+.wf h1{font-size:18px;font-weight:650;margin:0}
+.wf h2{font-size:15px;font-weight:650;margin:0}
+.wf h3{font-size:13.5px;font-weight:650;margin:0}
+.wf p{margin:0;font-size:12.5px}
+.wf small,.wf .wf-muted{color:var(--wf-muted);font-size:11.5px}
+.wf a{color:var(--wf-accent);font-size:12.5px}
+.wf ul{margin:0;padding-left:16px}
+.wf label{display:block;font-size:11.5px;color:var(--wf-muted)}
+.wf input,.wf select,.wf textarea{width:100%;font:12.5px var(--sans);color:var(--wf-ink);
+  background:var(--wf-paper);border:1.3px solid var(--wf-line);border-radius:var(--wf-radius);
+  padding:6px 8px;margin-top:3px}
+.wf input[type=checkbox],.wf input[type=radio]{width:13px;height:13px;margin:0;accent-color:var(--wf-accent)}
+.wf button{font:600 12px var(--sans);color:var(--wf-ink);background:var(--wf-card);
+  border:1.3px solid var(--wf-line);border-radius:var(--wf-radius);padding:6px 12px;cursor:default}
+.wf button.primary,.wf [data-primary]{background:var(--wf-accent);border-color:var(--wf-accent);color:#fff}
+[data-theme="dark"] .wf button.primary{color:#101413}
+.wf .wf-card,.wf .wf-box{border:1.3px solid var(--wf-line);border-radius:var(--wf-radius);
+  padding:10px;background:var(--wf-card)}
+.wf .wf-pill,.wf .wf-chip{display:inline-block;border:1.2px solid var(--wf-line);border-radius:99px;
+  padding:2px 9px;font-size:11px;color:var(--wf-muted)}
+.wf .wf-pill.accent{border-color:var(--wf-accent);color:var(--wf-accent)}
+.wf .wf-avatar{width:26px;height:26px;border-radius:50%;border:1.3px solid var(--wf-line);
+  background:var(--wf-card);flex:none}
+.wf .wf-img{border:1.3px solid var(--wf-line);border-radius:var(--wf-radius);background:var(--wf-card);
+  background-image:linear-gradient(135deg,transparent 47%,var(--wf-line) 47%,var(--wf-line) 53%,transparent 53%)}
+.wf .wf-line{height:9px;border-radius:3px;background:var(--wf-line);opacity:.55}
+.wf .wf-divider{height:1.3px;background:var(--wf-line);border:0;margin:0}
+
+/* diagram */
+.diagram{margin:24px 0;padding:20px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.dg-row{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:8px 0}
+.dg-node{flex:1;min-width:120px;border:1.4px solid var(--line);border-radius:8px;padding:11px 13px;
+  background:var(--card)}
+.dg-node[data-tone="accent"]{border-color:var(--accent);background:var(--accent-soft)}
+.dg-node[data-tone="risk"]{border-color:var(--redline);background:var(--redline-soft)}
+.dg-node b{display:block;font:600 13.5px var(--sans)}
+.dg-node span{font-size:12px;color:var(--muted);line-height:1.4}
+.dg-arrow{align-self:center;color:var(--muted);font:600 15px var(--mono);flex:none;padding:0 2px}
+.dg-group{border:1.4px dashed var(--line);border-radius:10px;padding:12px;margin:10px 0}
+.dg-group>.dg-legend{font:600 10px var(--mono);letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:8px}
+
+/* ---------- open questions ---------- */
+.qform{margin:26px 0;border:1.5px solid var(--redline);border-radius:10px;background:var(--card);overflow:hidden}
+.qform>header{padding:12px 16px;background:var(--redline-soft);border-bottom:1px solid var(--line-soft)}
+.qform>header h3{margin:0;font:600 14px var(--sans);color:var(--redline)}
+.qform>header p{margin:3px 0 0;font-size:13px;color:var(--muted)}
+.q{padding:16px;border-bottom:1px solid var(--line-soft)}
+.q:last-child{border-bottom:0}
+.q-title{font-weight:600;font-size:15px;margin:0 0 3px}
+.q-detail{font-size:13.5px;color:var(--muted);margin:0 0 10px}
+.q-opts{display:grid;gap:6px}
+.q-opt{display:flex;gap:9px;align-items:flex-start;padding:8px 11px;border:1px solid var(--line);
+  border-radius:7px;cursor:pointer;font-size:14px}
+.q-opt:hover{border-color:var(--muted)}
+.q-opt input{margin:3px 0 0;accent-color:var(--accent);flex:none}
+.q-opt.sel{border-color:var(--accent);background:var(--accent-soft)}
+.q-opt small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+.q-opt .rec{font:600 9.5px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
+.q textarea,.cmt textarea{width:100%;margin-top:8px;font:14px var(--sans);color:var(--ink);
+  background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:9px 11px;
+  resize:vertical;min-height:62px}
+.q textarea:focus,.cmt textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+
+/* inline comment box */
+.cmt{margin:10px 0 18px;padding:12px 14px;border-left:2px solid var(--redline);background:var(--redline-soft);
+  border-radius:0 8px 8px 0}
+.cmt label{font:600 10px var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--redline)}
+.cmt[hidden]{display:none}
+
+/* ---------- review bar ---------- */
+.reviewbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:center;gap:16px;
+  padding:11px 24px;background:var(--card);border-top:1px solid var(--line);
+  box-shadow:0 -1px 3px rgba(22,33,31,.07);font-size:13.5px}
+.reviewbar .fill{flex:1;color:var(--muted)}
+.reviewbar b{color:var(--ink)}
+.btn{font:600 13px var(--sans);border-radius:7px;padding:7px 15px;cursor:pointer;border:1px solid var(--line);
+  background:var(--card);color:var(--ink)}
+.btn:hover{border-color:var(--muted)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+[data-theme="dark"] .btn.pri{color:#101413}
+.btn.pri:hover{opacity:.9}
+
+dialog{border:1px solid var(--line);border-radius:12px;padding:0;max-width:760px;width:92vw;
+  background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(10,16,15,.45)}
+dialog header{padding:14px 18px;border-bottom:1px solid var(--line-soft)}
+dialog h3{margin:0;font:600 15px var(--sans)}
+dialog p{margin:3px 0 0;font-size:13px;color:var(--muted)}
+dialog textarea{width:100%;height:44vh;border:0;border-radius:0;padding:16px 18px;resize:none;
+  font:13px/1.6 var(--mono);background:var(--paper);color:var(--ink)}
+dialog footer{display:flex;gap:10px;justify-content:flex-end;padding:12px 18px;
+  border-top:1px solid var(--line-soft)}
+
+@media (max-width:1000px){
+  .app{grid-template-columns:1fr;gap:0;padding:0 20px}
+  .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line-soft);
+    padding:24px 0 16px;margin-bottom:8px}
+  .spine{display:flex;flex-wrap:wrap;gap:4px}
+  .spine::before{display:none}
+  .spine a{padding:5px 10px;border:1px solid var(--line);border-radius:99px;font-size:12.5px}
+  .spine a::before{display:none}
+  .doc{padding-top:8px}
+  .acode{grid-template-columns:1fr}
+  .acode>pre{border-right:0;border-bottom:1px solid var(--line-soft)}
+}
+@media print{
+  .rail,.reviewbar,.mark,dialog{display:none}
+  .app{display:block;max-width:none} body{padding:0}
+  .block,.canvas,.qform{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="rail">
+  <p class="rail-title">Contents</p>
+  <nav><ol class="spine"><li><a href="#current-state-at-a-glance">Current state at a glance</a></li><li><a href="#data-model-changes">Data model changes</a></li><li><a href="#global-ui-primitives">Global UI primitives</a></li><li><a href="#sessions-module-prd-3">Sessions module (PRD §3)</a></li><li><a href="#player-profiles-shot-chart-prd-4">Player profiles &amp; shot chart (PRD §4)</a></li><li><a href="#matches-module-prd-5">Matches module (PRD §5)</a></li><li><a href="#competitive-games-module-prd-6">Competitive games module (PRD §6)</a></li><li><a href="#drills-module-prd-7">Drills module (PRD §7)</a></li><li><a href="#sheets-export-prd-9">Sheets export (PRD §9)</a></li><li><a href="#offline-sync-consistency-prd-1-3">Offline sync consistency (PRD §1.3)</a></li><li><a href="#bug-fixes-v5-5-v5-6-prd-12">Bug fixes — v5.5 / v5.6 (PRD §12)</a></li><li><a href="#not-doing">Not doing</a></li><li><a href="#verification">Verification</a></li></ol></nav>
+  <div class="rail-foot"><button id="theme" type="button">Theme</button></div>
+</aside>
+<main class="doc">
+<header class="plan-head">
+  <p class="eyebrow">Implementation plan</p>
+  <h1>TAP v5.8 gap-closure plan</h1>
+  <p class="lede">Bring the shipped app in line with PRD v5.8 — the data model is already close to spec, but several modules are wired to mock data, one has a live data-integrity bug, and the whole UI needs a manual theme toggle and exact palette.</p>
+  <ul class="meta"><li>Status <b>Awaiting review</b></li><li>Owner <b>amelliti</b></li><li>Repo <b>tap-pwa</b></li><li>Rendered <b>2026-08-22</b></li></ul>
+</header>
+<p>PRD v5.8 reads like a big jump from what&#x27;s running today, but the gap is narrower
+than the document suggests. The Postgres schema (<code>supabase/migrations/001</code> and
+<code>002</code>) already models almost everything v5.8 asks for — planned/active sessions,
+player shooting targets, per-hand drill data, competitive game results. The real
+work is in the client: several screens that look finished are wired to hardcoded
+arrays instead of that schema, three different ad-hoc &quot;add a player&quot; inputs exist
+where the PRD wants one reusable picker, and the Drills module has been silently
+saving every heat with an empty <code>player_id</code> since it shipped.</p>
+<p>This plan is organized by PRD section so it can be reviewed and executed in
+parallel by module. Each section states what already works, cites the file that
+proves it, and scopes the delta.</p>
+<div class="callout" data-tone="risk"><span class="tag">Fix first, independent of everything else</span><div><p><code>src/pages/DrillPage.tsx</code>&#x27;s setup wizard never calls <code>drillStore.setPlayers()</code> —
+Step 4 is a placeholder (&quot;Player selection coming soon. Solo drill by default.&quot;).
+Every <code>heat_entries</code> row committed by <code>commitHeat()</code> today has
+<code>player_id: players[currentPlayerIndex]?.id ?? &#x27;&#x27;</code>, which resolves to <code>&#x27;&#x27;</code> because
+<code>players</code> is always empty. Every drill logged in production so far is
+unattributed. This is a one-file fix (wire the Player Picker Modal into that
+step) and should ship before anything else in this plan, since every day it&#x27;s
+unfixed is more unattributable data.</p></div></div>
+<div class="sec"><h2 id="current-state-at-a-glance">Current state at a glance</h2><button class="mark" data-mark="current-state-at-a-glance" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="current-state-at-a-glance" hidden=""><label for="c-current-state-at-a-glance">Comment</label><textarea id="c-current-state-at-a-glance" data-input="current-state-at-a-glance" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<p>| Module | Data model | Client wiring |
+| --- | --- | --- |
+| Sessions lifecycle | Ready (<code>sessions.state</code>, <code>is_recurring</code>) | Planned state exists in the type but no code path ever creates one — <code>useOpenSession</code>/<code>useActivateSession</code> both hardcode <code>active</code> |
+| Player profiles | Ready (<code>target_ft/mid/3pt_percent</code>) | Targets aren&#x27;t editable; profile card has no recent-activity log; shot chart FT marker is a hardcoded number |
+| Shot chart | 15 zones render correctly with correct color thresholds and correct line layering | 5 of the 15 zones (restricted area + 4 interior) have no matching <code>ShotSpot</code> value, so they can never receive real data |
+| Matches | Ready (<code>scoring_style</code>, per-game rosters) | Duration Wave mode is UI-only decoration — always sends <code>targetScore</code>; team reassignment (<code>movePlayer</code>) exists in the store but no UI calls it |
+| Competitive games | Ready (<code>competitive_games</code>, <code>competitive_results</code> cover all 4 types) | Banks is 100% hardcoded mock data; Middies/Next/Generic have no data-entry screen at all |
+| Drills | Ready (<code>heat_entries.hand</code>, <code>.spot</code>) | Active shooter is never set — see callout above |
+| Sheets export | N/A | Works, but ships the Google OAuth client secret in the browser bundle, and writes 7 tabs while the UI says 6 |
+| Theming | N/A | Dark/light already exist as CSS custom properties keyed off <code>prefers-color-scheme</code>, but there&#x27;s no manual toggle and the palette doesn&#x27;t match the PRD&#x27;s hex values anywhere |</p>
+<div class="sec"><h2 id="data-model-changes">Data model changes</h2><button class="mark" data-mark="data-model-changes" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="data-model-changes" hidden=""><label for="c-data-model-changes">Comment</label><textarea id="c-data-model-changes" data-input="data-model-changes" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<p>Smaller than expected: one constraint is missing, and one taxonomy extension is
+TypeScript-only. Nothing else in this plan needs a migration.</p>
+<div class="block"><div class="block-head"><span class="block-kind">sql</span><span class="block-name">supabase/migrations/003_v58_additions.sql</span></div><pre class="code"><code>alter table sessions
+add constraint sessions_state_valid
+check (state in (&#x27;planned&#x27;, &#x27;active&#x27;, &#x27;completed&#x27;));</code></pre></div>
+<div class="block"><div class="block-head"><span class="block-kind">Decision</span><span class="block-name">How do we resolve PRD 1.3&#x27;s last-write-wins requirement?</span></div><div class="block-body"><div class="opts"><div class="opt" data-picked="true"><div class="opt-h"><b>No schema change — current behavior already satisfies it</b><span class="badge">Chosen</span></div><p>This is a single-scribe, single-device app (PRD 1.2: &quot;single user, single
+scribe&quot;). There is no concurrent-writer scenario for LWW to arbitrate —
+<code>dbUpdate</code>&#x27;s plain <code>.update(...).eq(&#x27;id&#x27;, rowId)</code> and <code>syncQueue.ts</code>&#x27;s
+retry-on-reconnect already apply writes in the order they reach Postgres,
+which <em>is</em> last-write-wins for a single writer. Adding an <code>updated_at</code>/version
+column buys nothing without a second writer to compare against.</p></div><div class="opt" data-picked="false"><div class="opt-h"><b>Add updated_at + version to every mutable table</b></div><p>Standard LWW plumbing, but it&#x27;s schema and query overhead in service of a
+conflict that can&#x27;t currently occur. Revisit if a second device or a
+collaborative-scribe feature ever ships.</p></div></div></div></div>
+<div class="block"><div class="block-head"><span class="block-kind">Decision</span><span class="block-name">Where does location-history autocomplete&#x27;s data come from?</span></div><div class="block-body"><div class="opts"><div class="opt" data-picked="true"><div class="opt-h"><b>Derive from existing sessions.location, no new table</b><span class="badge">Chosen</span></div><p><code>SELECT DISTINCT location FROM sessions ORDER BY date DESC LIMIT 20</code> (or the
+equivalent client-side dedupe over the <code>useSessions</code> cache already loaded for
+the Calendar) gives the exact &quot;previously used locations surface as tappable
+suggestions&quot; behavior PRD 3.2 asks for, with zero migration.</p></div><div class="opt" data-picked="false"><div class="opt-h"><b>New location_history table</b></div><p>Only useful if locations ever need metadata (address, default duration).
+Nothing in v5.8 asks for that.</p></div></div></div></div>
+<div class="sec"><h2 id="global-ui-primitives">Global UI primitives</h2><button class="mark" data-mark="global-ui-primitives" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="global-ui-primitives" hidden=""><label for="c-global-ui-primitives">Comment</label><textarea id="c-global-ui-primitives" data-input="global-ui-primitives" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<p>Three pieces get built once and reused everywhere — building them first
+un-blocks the Sessions, Matches, and Drills sections below, all of which
+currently duplicate ad-hoc versions of the same interaction.</p>
+<div class="block"><div class="block-head"><span class="block-kind">Decision</span><span class="block-name">Player Picker Modal: one shared component, or leave the three existing ad-hoc inputs?</span></div><div class="block-body"><div class="opts"><div class="opt" data-picked="true"><div class="opt-h"><b>Build src/components/ui/PlayerPickerModal.tsx once</b><span class="badge">Chosen</span></div><p>Today there are three different, non-shared &quot;add a player&quot; UIs: a free-text
+nickname input in <code>DashboardPage.tsx</code>&#x27;s <code>NewSessionModal</code>, an inline free-text
+input in <code>ActiveDashboard</code>&#x27;s roster strip, and <code>AttendancePage.tsx</code>&#x27;s full-page
+checklist (the only one actually backed by <code>usePlayers()</code>). None dedupe
+against the real player database, none highlight already-selected players,
+none have the spec&#x27;d floating &quot;Add New Player&quot; affordance. PRD 3.5 asks for
+this exact modal in two places (session start, live session) — Drills setup
+(§7.1a) and Matches pause-to-sub (§5.5) need the identical capability. One
+component, five call sites.</p></div><div class="opt" data-picked="false"><div class="opt-h"><b>Keep three separate inputs, patch each individually</b></div><p>Cheaper per-screen but guarantees the next screen that needs &quot;add a player&quot;
+invents a sixth variant. The PRD explicitly calls out &quot;consistent behaviour
+across both entry points&quot; (3.5) — a shared component is what makes that true
+by construction instead of by discipline.</p></div></div></div></div>
+<div class="canvas"><div class="canvas-head"><h4>Player Picker Modal</h4></div><div class="frames"><div class="frame"><div class="frame-label">Default — searchable roster</div><div class="wf" data-surface="mobile"><div class="wf-statusbar"><span>9:41</span><span>●●●</span></div><div class="wf-inner">
+<div style="display:flex;flex-direction:column;height:100%">
+<div style="padding:14px;border-bottom:1.3px solid var(--wf-line);display:flex;flex-direction:column;gap:10px">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Add players</h2>
+    <button>Confirm</button>
+  </div>
+  <input placeholder="Search roster" />
+</div>
+<div style="flex:1;overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:8px">
+  <div class="wf-card" style="display:flex;align-items:center;gap:10px;border-color:var(--wf-accent)">
+    <span class="wf-avatar"></span><span style="flex:1">Marcus</span><span class="wf-pill accent">selected</span>
+  </div>
+  <div class="wf-card" style="display:flex;align-items:center;gap:10px">
+    <span class="wf-avatar"></span><span style="flex:1">JC</span>
+  </div>
+  <div class="wf-card" style="display:flex;align-items:center;gap:10px">
+    <span class="wf-avatar"></span><span style="flex:1">Dre</span>
+  </div>
+  <div class="wf-card" style="display:flex;align-items:center;gap:10px;border-color:var(--wf-accent)">
+    <span class="wf-avatar"></span><span style="flex:1">Tomas</span><span class="wf-pill accent">selected</span>
+  </div>
+  <div class="wf-card" style="display:flex;align-items:center;gap:10px">
+    <span class="wf-avatar"></span><span style="flex:1">Sef</span>
+  </div>
+</div>
+<div style="padding:14px;border-top:1.3px solid var(--wf-line)">
+  <button class="primary" style="width:100%">+ Add new player</button>
+</div>
+</div></div></div><div class="frame-note">Persistent modal, stays open across selections. Already-selected players stay visible with an accent border rather than disappearing — matches PRD 3.5&#x27;s &#x27;remain visible in the list, not hidden or greyed out.&#x27;</div></div><div class="frame"><div class="frame-label">Inline new-player form</div><div class="wf" data-surface="mobile"><div class="wf-statusbar"><span>9:41</span><span>●●●</span></div><div class="wf-inner">
+<div style="display:flex;flex-direction:column;height:100%">
+<div style="padding:14px;border-bottom:1.3px solid var(--wf-line)">
+  <h2 style="margin:0">Add players</h2>
+</div>
+<div style="flex:1;padding:12px"></div>
+<div style="padding:14px;border-top:1.3px solid var(--wf-line);display:flex;flex-direction:column;gap:10px">
+  <label>Name<input value="Alexandre" /></label>
+  <label>Nickname<input value="Alex" /></label>
+  <button class="primary">Save &amp; add to session</button>
+</div>
+</div></div></div><div class="frame-note">Tapping &#x27;Add new player&#x27; expands in place — no navigation, no second modal. Saves and auto-selects for the current context in one tap.</div></div></div></div>
+<div class="block"><div class="block-head"><span class="block-kind">Decision</span><span class="block-name">Global numpad rule (PRD 1.4): add a shared NumberPad, or leave tap-to-increment as-is?</span></div><div class="block-body"><div class="opts"><div class="opt" data-picked="true"><div class="opt-h"><b>Add src/components/ui/NumberPad.tsx; keep the existing +/- buttons alongside it</b><span class="badge">Chosen</span></div><p>Today <code>MatchActivePage.tsx</code>&#x27;s score and <code>DrillPage.tsx</code>&#x27;s makes counter render
+the number itself with no <code>onClick</code> — only the separate +/- buttons are
+interactive. The PRD&#x27;s rule is universal and explicit (&quot;No exceptions&quot;). The
+fast quick-increment buttons stay for the common case (make, miss); tapping
+the number itself opens the numpad for correcting a fat-fingered value or
+entering a value far from zero (e.g. a 47-point margin), which the +/- buttons
+handle badly today.</p></div><div class="opt" data-picked="false"><div class="opt-h"><b>Replace +/- entirely with numpad-only entry</b></div><p>Matches PRD&#x27;s &quot;no exceptions&quot; wording most literally, but a numpad for every
+single make during a drill is slower than a tap — directly against P4 (speed
+over completeness). The additive approach gets the same data-correction
+capability without regressing the common path.</p></div></div></div></div>
+<div class="block"><div class="block-head"><span class="block-kind">Decision</span><span class="block-name">Theme: adopt the PRD&#x27;s exact hex palette, or keep the current &#x27;Sport Card&#x27; palette and only add the missing manual toggle?</span></div><div class="block-body"><div class="opts"><div class="opt" data-picked="true"><div class="opt-h"><b>Adopt PRD&#x27;s exact tokens</b><span class="badge">Chosen</span></div><p>The current theme is already centralized as CSS custom properties in
+<code>src/index.css</code> (<code>--ink</code>, <code>--panel</code>, <code>--chalk</code>, <code>--orange</code>, etc.), flipped by a
+single <code>@media (prefers-color-scheme: light)</code> block — the right architecture,
+wrong values. None of the PRD&#x27;s specified hex codes (<code>#FFFFFF</code>/<code>#0F0F14</code>
+background, <code>#E8500A</code> accent, etc.) appear anywhere in the repo today; it&#x27;s a
+different palette (<code>#111827</code>/<code>#FF5A1F</code>), not a close miss. Because the values
+are already centralized in one file, swapping them is low-risk — no component
+hardcodes a color outside <code>index.css</code>&#x27;s variables (confirmed: zero <code>dark:</code>
+Tailwind variants exist, and <code>Button.tsx</code>/<code>Card.tsx</code>/<code>Tag.tsx</code> all reference
+<code>var(--*)</code> tokens, not literals).</p></div><div class="opt" data-picked="false"><div class="opt-h"><b>Keep current palette, add toggle only</b></div><p>Less visual churn, but leaves the PRD&#x27;s Section 1.4 table — which every other
+part of the document treats as binding spec, not suggestion — permanently
+unmet, and the &quot;Bug v5.5&quot; callout explicitly frames the missing toggle and
+palette together as one open issue.</p></div></div></div></div>
+<ol class="steps"><li class="step"><h4>Manual theme control</h4><span class="reuse">Reuses: src/index.css&#x27;s existing CSS-variable structure</span><p>Add a <code>ThemeProvider</code> (<code>src/lib/theme.tsx</code>) that reads/writes a
+<code>tap_theme: &#x27;light&#x27; | &#x27;dark&#x27; | &#x27;system&#x27;</code> <code>localStorage</code> key and sets
+<code>document.documentElement.dataset.theme</code>. Rewrite <code>index.css</code>&#x27;s color block
+into <code>:root[data-theme=&quot;light&quot;]</code> / <code>:root[data-theme=&quot;dark&quot;]</code> selectors (kept
+behind a <code>:root:not([data-theme])</code> media-query fallback for <code>system</code>), with
+every value replaced by the PRD 1.4 table. Add a Light/Dark/System segmented
+control to <code>SettingsPage.tsx</code>, next to the existing &quot;Supabase Status&quot; row.</p></li><li class="step"><h4>NumberPad component</h4><span class="reuse">Reuses: Card/Button primitives, existing bottom-sheet pattern from DashboardPage&#x27;s session-notes sheet</span><p>Bottom-sheet with a 0-9 grid, backspace, and Done. Wire it as an <code>onClick</code> on
+the number spans in <code>MatchActivePage.tsx</code> (<code>currentAScore</code>/<code>currentBScore</code>),
+<code>DrillPage.tsx</code> (<code>currentMakes</code>, and the heat-size/target &quot;Player Input&quot;
+quick-pick from the Drills section below), and the Banks margin stepper.</p></li><li class="step"><h4>Player Picker Modal</h4><span class="reuse">Reuses: usePlayers() (already real, already used by AttendancePage), Avatar/Card</span><p>Build once, then replace: <code>NewSessionModal</code>&#x27;s free-text input, <code>ActiveDashboard</code>&#x27;s
+inline add-player input, and wire it fresh into <code>DrillPage.tsx</code> setup Step 4
+and a new pause-to-edit-roster affordance in <code>MatchActivePage.tsx</code>.</p></li></ol>
+<div class="sec"><h2 id="sessions-module-prd-3">Sessions module (PRD §3)</h2><button class="mark" data-mark="sessions-module-prd-3" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="sessions-module-prd-3" hidden=""><label for="c-sessions-module-prd-3">Comment</label><textarea id="c-sessions-module-prd-3" data-input="sessions-module-prd-3" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<ol class="steps"><li class="step"><h4>Actually create Planned sessions</h4><span class="reuse">Reuses: useSessions.ts&#x27;s existing Session/insert shape</span><p>Add <code>useCreatePlannedSession</code> (<code>sessions.insert({ state: &#x27;planned&#x27;, ... })</code>),
+wired to Calendar&#x27;s &quot;tap a future date → +&quot; flow (PRD 3.2). Today that flow
+doesn&#x27;t exist — <code>CalendarPage.tsx</code>&#x27;s only creation path
+(<code>handleCreateAndOpen</code>) always sets <code>state: &#x27;active&#x27;</code>, same as
+<code>DashboardPage.tsx</code>&#x27;s <code>useOpenSession</code>.</p></li><li class="step"><h4>Calendar month pills</h4><span class="reuse">Reuses: Card/Tag styling, existing sessionDays lookup in CalendarPage.tsx</span><p>Replace <code>.cal-dot</code> (<code>src/index.css:144-148</code>, a plain 5px dot) with a pill per
+session showing <code>location</code> + duration (past) or &quot;Planned&quot; (future). Switch
+<code>sessionDays: Set&amp;lt;number&amp;gt;</code> to <code>Map&amp;lt;number, Session[]&amp;gt;</code> so multiple
+same-day sessions (PRD 3.7&#x27;s Saturday two-gym pattern) each render their own
+pill instead of collapsing to one dot.</p></li><li class="step"><h4>Missed-session treatment</h4><span class="reuse">Reuses: the same state field, no schema change</span><p>Client-side only: <code>state === &#x27;planned&#x27; &amp;&amp; date &amp;lt; today</code> renders a neutral
+grey &quot;Missed&quot; pill instead of the orange &quot;Planned&quot; one in <code>stateColor()</code>
+(<code>CalendarPage.tsx:71-75</code>). Never deleted, matches PRD 3.2.</p></li><li class="step"><h4>Start Now / Review Details modal</h4><p>Tapping a Planned pill currently jumps straight to <code>AttendancePage.tsx</code>
+(<code>CalendarPage.tsx:138-145</code>). Insert the two-option modal from PRD 3.3:
+&quot;Start Now&quot; calls the existing <code>useActivateSession</code> directly; &quot;Review
+Details&quot; opens an editable form (reuses the planned-session creation form)
+before activating.</p></li><li class="step"><h4>Ad-hoc-on-a-planned-day disambiguation</h4><p>In <code>DashboardPage.tsx</code>&#x27;s <code>handleConfirm</code> and <code>CalendarPage.tsx</code>&#x27;s
+<code>handleCreateAndOpen</code>, check for an existing <code>state: &#x27;planned&#x27;</code> session on the
+target date before creating a new active one; if found, prompt &quot;You have a
+planned session at [location] today — is this it?&quot; per PRD 3.3.</p></li><li class="step"><h4>Location autocomplete</h4><p><code>useLocationHistory()</code> feeding a <code>&amp;lt;datalist&amp;gt;</code> on both location inputs
+(<code>NewSessionModal</code>, Calendar&#x27;s quick-start sheet) — see the Data Model
+Decision above for why this needs no new table.</p></li><li class="step"><h4>Weekly recurrence</h4><span class="reuse">Reuses: sessions.is_recurring / recurrence_weekday columns, already in the schema but dead</span><p>On planned-session creation with recurrence on, insert a fixed batch (e.g. 8
+weeks) of future <code>planned</code> rows sharing <code>recurrence_weekday</code>, rather than
+standing up a cron — there&#x27;s no serverless job infrastructure in this repo
+beyond the existing GitHub Actions migration runner, and a fixed horizon is
+simple to top up on next creation.</p></li><li class="step"><h4>Session Recap: Highlight and To work on callouts</h4><span class="reuse">Reuses: the already-defined but unused RecapCallout type (src/types/index.ts)</span><p><code>SessionRecapPage.tsx</code> today only renders a duration hero and a flat activity
+list. Add the two missing PRD 8/Screen-5 callouts: Highlight (the same
+closest-game/best-spot logic already computed for Match/Drill recaps,
+surfaced at the session level) and To work on (worst drill spot relative to
+its goal, if any drill happened that session).</p></li></ol>
+<div class="sec"><h2 id="player-profiles-shot-chart-prd-4">Player profiles &amp; shot chart (PRD §4)</h2><button class="mark" data-mark="player-profiles-shot-chart-prd-4" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="player-profiles-shot-chart-prd-4" hidden=""><label for="c-player-profiles-shot-chart-prd-4">Comment</label><textarea id="c-player-profiles-shot-chart-prd-4" data-input="player-profiles-shot-chart-prd-4" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<ol class="steps"><li class="step"><h4>Editable name, nickname, and shooting targets</h4><span class="reuse">Reuses: useUpdatePlayer() (src/hooks/usePlayers.ts) — already written, has zero call sites today</span><p>Add an edit affordance on <code>PlayerProfilePage.tsx</code> (tap-to-edit or a pencil
+icon opening a sheet) for Name, Nickname, and the three target percentages.
+The mutation already exists; nothing in the data layer needs to change.</p></li><li class="step"><h4>Recent Activity Log (PRD 4.3)</h4><p>New <code>useRecentPlayerActivity(playerId, limit)</code> reading <code>activity_records</code> for
+that player and resolving each row&#x27;s <code>reference_id</code> against its
+<code>activity_type</code> (match/drill/competitiveGame) for the per-type result line
+(W/L + game count, shooting % + hand + volume, or finishing position). Render
+as Activity Cards with a &quot;View More&quot; button that loads the next 10 in place
+(PRD 4.3 / the open question in PRD §11 — see Questions below).</p></li><li class="step"><h4>Real FT marker on the shot chart</h4><span class="reuse">Reuses: the usePlayerShooting FT aggregate already computed and displayed elsewhere on this same page</span><p><code>ShotChart.tsx</code> currently calls <code>zoneColor(41, 50, &#x27;ft&#x27;)</code> with hardcoded
+numbers regardless of the player. Pass the real <code>ftMakes</code>/<code>ftAttempts</code> already
+fetched for the profile card&#x27;s FT% bar.</p></li><li class="step"><h4>Give the 5 orphaned zones real data</h4><p><code>buildZones()</code> correctly renders all 15 PRD zones, but <code>ShotSpot</code> only has 5
+values (<code>left0/left45/center/right45/right0</code>), so <code>spotZoneMap</code> can only ever
+color the 10 mid-range/three-point zones — the restricted area and the 4
+interior (block/post) zones permanently show mock numbers. Extend <code>ShotSpot</code>
+with the missing positions, add them to the Drill setup spot-picker, and
+extend <code>spotZoneMap</code> to cover all 15. (The mid-post/low-block color-threshold
+categorization has a real ambiguity in the PRD text itself — see Questions.)</p></li><li class="step"><h4>Spot History drill-down (PRD 4.4)</h4><p>No zone in <code>ShotChart.tsx</code> currently has an <code>onClick</code>. Add one that opens a
+panel listing past <code>heat_entries</code> for that <code>(spot, hand)</code>, most recent first,
+with each entry&#x27;s date, location, session total, and heat-by-heat sequence.</p></li><li class="step"><h4>Real per-format and Recreational W/L</h4><span class="reuse">Reuses: the games/matches join pattern already used by usePlayerShooting&#x27;s drill:drills(shot_type) embed</span><p>New <code>usePlayerWLByFormat(playerId)</code> (join <code>games</code> to <code>matches(format)</code>,
+group client-side) replaces <code>WinLossPage.tsx</code>&#x27;s hardcoded <code>DATA</code> array. Fix
+the page to actually read <code>useParams&amp;lt;{id}&amp;gt;()</code> — it currently ignores the
+route param entirely, so every player sees the identical fake numbers, and
+its back button is hardcoded to <code>/players/1</code>. Recreational record aggregates
+<code>competitive_results</code> for game types <code>banks</code>/<code>next</code>/<code>generic</code> only — Middies&#x27;
+PRD-defined career stat is Mid-Range %, not W/L (PRD 6.2 vs 6.1/6.3/6.4), so
+it must not feed this number.</p></li><li class="step"><h4>W-L pill on the roster list</h4><span class="reuse">Reuses: usePlayerWL, already real and already used on PlayerProfilePage</span><p>Fills the &quot;wasted space&quot; bug from PRD 12.1 and gives <code>PlayersPage.tsx</code>&#x27;s rows
+the record at a glance without opening a profile.</p></li></ol>
+<div class="sec"><h2 id="matches-module-prd-5">Matches module (PRD §5)</h2><button class="mark" data-mark="matches-module-prd-5" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="matches-module-prd-5" hidden=""><label for="c-matches-module-prd-5">Comment</label><textarea id="c-matches-module-prd-5" data-input="matches-module-prd-5" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<div class="block"><div class="block-head"><span class="block-kind">Decision</span><span class="block-name">Team reassignment and Banks elimination order: real drag-and-drop, or tap-based?</span></div><div class="block-body"><div class="opts"><div class="opt" data-picked="true"><div class="opt-h"><b>Tap-to-cycle / tap-to-sequence, no drag library</b><span class="badge">Chosen</span></div><p><code>matchStore.ts</code> already exports <code>movePlayer(playerId, to: &#x27;A&#x27;|&#x27;B&#x27;|&#x27;sub&#x27;)</code> —
+it&#x27;s simply never called from <code>MatchSetupPage.tsx</code>. Wiring it as &quot;tap a chip
+to cycle Team A → Team B → Sub&quot; gets the exact same end state as drag with
+zero new dependencies and no mobile-Safari touch-drag reliability risk. Banks&#x27;
+&quot;drag-to-rank&quot; becomes tap-in-elimination-order (tap 1st eliminated, then
+2nd, ...; the app assigns rank from tap sequence) — same data, same principle.</p></div><div class="opt" data-picked="false"><div class="opt-h"><b>Real drag-and-drop (pointer-based DnD library)</b></div><p>Closer to the PRD&#x27;s literal &quot;drag&quot; wording, but adds a dependency and touch
+reliability edge cases (accidental drags mid-game, scroll-vs-drag conflicts)
+against a P4 (speed over completeness) app used one-handed courtside. The tap
+sequence produces an identical data model with none of that risk.</p></div></div></div></div>
+<div class="canvas"><div class="canvas-head"><h4>Match Setup — scoring style and team assignment</h4></div><div class="frames"><div class="frame"><div class="frame-label">Scoring style (reordered per PRD 12.6)</div><div class="wf" data-surface="mobile"><div class="wf-statusbar"><span>9:41</span><span>●●●</span></div><div class="wf-inner">
+<div style="display:flex;flex-direction:column;gap:14px;padding:16px;height:100%">
+<h2 style="margin:0">New Match — 3v3</h2>
+<div>
+  <small class="wf-muted">SCORING STYLE</small>
+  <div style="display:flex;gap:8px;margin-top:6px">
+    <button class="primary" style="flex:1">Target Score</button>
+    <button style="flex:1">Duration Wave</button>
+  </div>
+</div>
+<div>
+  <small class="wf-muted">TARGET POINTS</small>
+  <div style="display:flex;gap:8px;margin-top:6px">
+    <button>7</button><button class="primary">11</button><button>21</button><button>Other</button>
+  </div>
+</div>
+<div class="wf-divider"></div>
+<small class="wf-muted">PLAYERS PRESENT</small>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+  <span class="wf-pill">Jordan</span><span class="wf-pill">Marcus</span><span class="wf-pill">JC</span>
+  <span class="wf-pill">Dre</span><span class="wf-pill">Tomas</span><span class="wf-pill">Sef</span>
+</div>
+</div></div></div><div class="frame-note">Today Target/Wave render as two dead tabs, always defaulting to Target with a plain +/- stepper. This flips the order per PRD 12.6 and shows only the relevant input.</div></div><div class="frame"><div class="frame-label">Team assignment — tap to cycle</div><div class="wf" data-surface="mobile"><div class="wf-statusbar"><span>9:41</span><span>●●●</span></div><div class="wf-inner">
+<div style="display:flex;flex-direction:column;gap:12px;padding:16px;height:100%">
+<div style="display:flex;gap:8px">
+  <button style="flex:1">Shuffle</button><button style="flex:1">Re-shuffle</button>
+</div>
+<div class="wf-card">
+  <small class="wf-muted">TEAM A</small>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+    <span class="wf-pill accent">Jordan</span><span class="wf-pill accent">Marcus</span><span class="wf-pill accent">JC</span>
+  </div>
+</div>
+<div class="wf-card">
+  <small class="wf-muted">TEAM B</small>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+    <span class="wf-pill">Dre</span><span class="wf-pill">Tomas</span><span class="wf-pill">Sef</span>
+  </div>
+</div>
+<div class="wf-card">
+  <small class="wf-muted">SUB QUEUE</small>
+  <p class="wf-muted" style="margin:6px 0 0">Tap a player above to move them here</p>
+</div>
+<button class="primary">Start Match</button>
+</div></div></div><div class="frame-note">Tapping any chip cycles it A -&gt; B -&gt; Sub -&gt; A, calling the existing movePlayer action. Shuffle/Re-shuffle stay as the fast path; this is the manual override PRD 5.2 asks for.</div></div></div></div>
+<ol class="steps"><li class="step"><h4>Make Duration Wave a real mode</h4><span class="reuse">Reuses: ScoringStyle type and scoringStyle store field — already correct, just unwired</span><p>Wire the Target/Wave tab <code>onClick</code>s to <code>setScoringStyle</code>; conditionally render
+the Target quick-picks (7/11/21 + free input) or a Duration input (10/20 min</p><ul>
+<li>free input, countdown, and an audio alarm at zero) — never both, per PRD
+5.1. Remove the hardcoded <code>scoring_style: &#x27;targetScore&#x27;</code> in <code>handleStart</code>.</li>
+</ul></li><li class="step"><h4>Wire manual team reassignment</h4><p>Call <code>movePlayer</code> from tap handlers on the Team A/B/Sub chips per the
+Decision above.</p></li><li class="step"><h4>Possession / Winners Ball highlight</h4><p>Add a possession indicator (border or icon) on the team panel that won the
+last game, per PRD 5.3&#x27;s Winners Ball rule.</p></li><li class="step"><h4>Pause + mid-game roster edit</h4><span class="reuse">Reuses: the Player Picker Modal from Global UI Primitives</span><p><code>MatchActivePage.tsx</code>&#x27;s roster button (<code>Icons.roster</code>) currently has no
+<code>onClick</code>. Wire it to pause the timer and open the picker for late
+arrivals/injury subs, then resume with state intact (PRD 5.5).</p></li><li class="step"><h4>Tie-breaker rule</h4><span class="reuse">Reuses: completedGames already available in the store, same array MatchRecapPage reads today</span><p>Compute aggregate point differential across all games when game-win counts
+tie; otherwise Draw. The exact tie-break math has a genuine PRD wording
+ambiguity — see Questions.</p></li><li class="step"><h4>Quick Rematch with roster continuity</h4><span class="reuse">Reuses: matchStore.reset(), which already preserves format by omission</span><p>Add <code>resetForRematch()</code> that clears scores/<code>completedGames</code>/timer but keeps
+<code>format</code>/<code>teamA</code>/<code>teamB</code>/<code>subQueue</code>, landing on <code>MatchSetupPage</code> pre-filled
+and still editable — today&#x27;s full <code>reset()</code> wipes the roster entirely.</p></li><li class="step"><h4>Dominance and Best side recap callouts</h4><span class="reuse">Reuses: the same completedGames data MatchRecapPage already reduces for Closest/Longest</span><p>Dominance: the team with more game wins, average margin across those wins.
+Best side: the player present on the winning team the most games, derived
+from each <code>CompletedGame</code>&#x27;s <code>teamAPlayerIds</code>/<code>teamBPlayerIds</code>.</p></li></ol>
+<div class="sec"><h2 id="competitive-games-module-prd-6">Competitive games module (PRD §6)</h2><button class="mark" data-mark="competitive-games-module-prd-6" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="competitive-games-module-prd-6" hidden=""><label for="c-competitive-games-module-prd-6">Comment</label><textarea id="c-competitive-games-module-prd-6" data-input="competitive-games-module-prd-6" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<p><code>CompetitiveSetupPage.tsx</code> collects <code>gameType</code>/spot/players and then discards all
+of it — only Banks even navigates anywhere meaningful, and <code>BanksPage.tsx</code> is a
+fully hardcoded 5-player mock with a decorative (non-functional) drag handle.
+Middies, Next, and Generic have no data-entry screen at all despite the schema
+(<code>competitive_games</code>, <code>competitive_results</code>) already covering all four types
+column-for-column.</p>
+<ol class="steps"><li class="step"><h4>competitiveStore.ts</h4><span class="reuse">Reuses: the same ephemeral-Zustand-store pattern as drillStore.ts and matchStore.ts</span><p>Carries <code>gameType</code>/<code>spot</code>/<code>quotaPerPlayer</code>/<code>customName</code>/<code>playerIds</code> from setup
+into whichever activity screen handles that type, replacing the current
+silent drop between <code>CompetitiveSetupPage</code> and <code>BanksPage</code>.</p></li><li class="step"><h4>Banks: real data, tap-to-sequence elimination</h4><span class="reuse">Reuses: the tap-sequence Decision from Matches</span><p>Replace the hardcoded <code>PLAYERS</code> array with the real session roster from the
+store; replace the decorative grip-drag rows with tap-in-elimination-order;
+persist to <code>competitive_games</code> (<code>game_type: &#x27;banks&#x27;</code>) +
+<code>competitive_results</code> (<code>rank</code>, <code>score</code> for winner&#x27;s margin) on save, instead
+of the current <code>nav(&#x27;/match/recap&#x27;)</code> no-op.</p></li><li class="step"><h4>Middies screen</h4><span class="reuse">Reuses: the same spot-picker already shared with Banks in CompetitiveSetupPage</span><p>New post-game makes-per-player entry grid (tap a number to open the
+NumberPad); rank computed client-side by makes descending; persists makes +
+rank to <code>competitive_results</code>. Feeds Mid-Range % per spot, not Recreational
+W/L (PRD 6.2).</p></li><li class="step"><h4>Next screen</h4><p>Target-makes quick-pick (default 10, adjustable) at setup, then the same
+post-game count-entry grid as Middies; feeds Recreational W/L only.</p></li><li class="step"><h4>Generic activity</h4><p>Wire the already-existing <code>CompetitiveGame.custom_name</code> field to a text input
+in setup (currently unused despite being in the schema/type); ranking uses
+the same tap-sequence entry as Banks.</p></li></ol>
+<div class="sec"><h2 id="drills-module-prd-7">Drills module (PRD §7)</h2><button class="mark" data-mark="drills-module-prd-7" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="drills-module-prd-7" hidden=""><label for="c-drills-module-prd-7">Comment</label><textarea id="c-drills-module-prd-7" data-input="drills-module-prd-7" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<p>The setup wizard, spot-sequential engine, and heat-commit logic are largely
+built — this is a wiring and completeness pass, not a rebuild, apart from the
+data-integrity fix called out at the top of this plan.</p>
+<div class="canvas"><div class="canvas-head"><h4>Live Drill Screen</h4></div><div class="frames"><div class="frame"><div class="frame-label">Active shooter always visible</div><div class="wf" data-surface="mobile"><div class="wf-statusbar"><span>9:41</span><span>●●●</span></div><div class="wf-inner">
+<div style="display:flex;flex-direction:column;height:100%">
+<div style="padding:12px 16px;border-bottom:1.3px solid var(--wf-line);display:flex;justify-content:space-between">
+  <span>Three-Point · Right hand</span><span class="wf-pill">Spot 2 of 4</span>
+</div>
+<div style="padding:10px 16px;display:flex;gap:6px">
+  <span class="wf-pill accent">Left 45°</span><span class="wf-pill">Center</span><span class="wf-pill">Right 45°</span><span class="wf-pill">Right 0°</span>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px">
+  <h1 style="margin:0">Marcus shooting</h1>
+  <div style="display:flex;align-items:center;gap:22px">
+    <button style="width:60px;height:60px;border-radius:50%;font-size:22px">−</button>
+    <div style="font-size:64px;font-weight:700;line-height:1">7<small style="font-size:28px;color:var(--wf-muted)">/10</small></div>
+    <button class="primary" style="width:60px;height:60px;border-radius:50%;font-size:22px">+</button>
+  </div>
+  <small class="wf-muted">Heats · Left 45° — H1: 8/10 · H2: 6/10</small>
+</div>
+<div style="padding:14px;border-top:1.3px solid var(--wf-line);display:flex;gap:8px">
+  <button style="flex:1">Next Spot</button>
+  <button class="primary" style="flex:2">Save Heat &amp; Next</button>
+</div>
+</div></div></div><div class="frame-note">Today the makes counter is the largest element but not full-bleed, and there&#x27;s no player name anywhere because players[] is always empty. This makes the shooter the first thing you read, and adds the missing Next Spot button.</div></div></div></div>
+<ol class="steps"><li class="step"><h4>Wire the Player Picker Modal into setup Step 4</h4><span class="reuse">Reuses: the shared modal from Global UI Primitives; drillStore.setPlayers, which already exists and is already correct — it&#x27;s just never called</span><p>This is the data-integrity fix. Replace the &quot;coming soon&quot; placeholder in
+<code>DrillPage.tsx</code> with the picker, calling <code>setPlayers(selected)</code>. Everything
+downstream (round-robin rotation, <code>heat.playerId</code>) already works correctly
+once this array is populated.</p></li><li class="step"><h4>Active shooter display and manual override</h4><p>Show <code>players[currentPlayerIndex]</code> prominently (see Canvas above); add a tap
+target on the roster strip to jump the active index manually, per PRD 7.1a.</p></li><li class="step"><h4>Solo vs Group branching</h4><span class="reuse">Reuses: players.length, now meaningful once Step 4 is wired</span><p><code>mode = players.length &amp;lt;= 1 ? &#x27;solo&#x27; : &#x27;group&#x27;</code>. Group hides the
+session-target step entirely (fixed attempt quota only, per PRD 7.3&#x27;s &quot;make-
+targets create unacceptable wait times&quot;); Solo keeps the optional target.</p></li><li class="step"><h4>Heat-size and target quick-picks to spec</h4><span class="reuse">Reuses: the NumberPad for &#x27;Player Input&#x27;</span><p>Replace the current fixed grids (<code>[5,8,10,12,15,20]</code> for heat size,
+<code>[5,8,10,15,20]</code> for target) with the PRD&#x27;s actual quick-picks: heat size
+5/10/Player Input/Manual; target 10/50/100/Player Input/None. Manual mode has
+no fixed size — Next Spot auto-saves whatever was tallied.</p></li><li class="step"><h4>Add a distinct Next Spot button</h4><span class="reuse">Reuses: the existing spot-advance logic inside commitHeat, split out</span><p>Today only &quot;Save Heat &amp; Next&quot; exists — there&#x27;s no way to move on before a
+target is hit without also logging another heat. Add Next Spot per PRD 7.2&#x27;s
+navigation rule (available after ≥1 heat on the current spot).</p></li><li class="step"><h4>Pause mid-heat</h4><span class="reuse">Reuses: the Player Picker Modal</span><p>Same pattern as the Matches pause: open the picker without losing
+<code>completedHeats</code>/<code>currentMakes</code>, which are already safe in the Zustand store.</p></li><li class="step"><h4>Full breakdown table on DrillRecapPage</h4><span class="reuse">Reuses: completedHeats, now correctly tagged with real player IDs</span><p>Players × spots grid, heat-by-heat sequence per cell, totals row and column
+(PRD 7.5). Add the two missing callouts (Efficiency, Heat trend) alongside
+the existing three (rename to the PRD&#x27;s &quot;Spot best&quot;/&quot;Spot to work&quot; labels).</p></li><li class="step"><h4>Shot-type to career-stat rollup</h4><span class="reuse">Reuses: usePlayerStats.ts&#x27;s usePlayerShooting reduce loop</span><p>Extend the <code>type === &#x27;midRange&#x27;</code> branch to also match <code>layup</code>/<code>floater</code>/
+<code>postUp</code>, rolling all three into the same Mid-Range Interior bucket per PRD
+7.4, instead of the current 3-bucket (FT/Mid/3PT) reduction ignoring them.</p></li></ol>
+<div class="sec"><h2 id="sheets-export-prd-9">Sheets export (PRD §9)</h2><button class="mark" data-mark="sheets-export-prd-9" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="sheets-export-prd-9" hidden=""><label for="c-sheets-export-prd-9">Comment</label><textarea id="c-sheets-export-prd-9" data-input="sheets-export-prd-9" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<div class="callout" data-tone="risk"><span class="tag">Credential exposure, not just a spec gap</span><div><p><code>src/lib/sheetsExport.ts</code>&#x27;s <code>handleOAuthCallback</code> sends
+<code>client_secret: CLIENT_SECRET!</code> (from <code>VITE_GOOGLE_CLIENT_SECRET</code>) directly from
+the browser to Google&#x27;s token endpoint. Any <code>VITE_*</code> env var ships in the
+client bundle — this secret is currently readable by anyone who opens dev tools
+on the deployed app. This needs a server-side hop before anything else in this
+section, independent of the PRD gap analysis below.</p></div></div>
+<ol class="steps"><li class="step"><h4>Move the OAuth token exchange server-side</h4><span class="reuse">Reuses: Vercel, already the deploy target — a serverless function needs no new hosting</span><p>Add a Vercel serverless function (e.g. <code>api/google-oauth-callback.ts</code>) that
+holds <code>GOOGLE_CLIENT_SECRET</code> as a server-only env var and does the token
+exchange; the client posts the auth code to this endpoint instead of calling
+Google directly with the secret.</p></li><li class="step"><h4>Sheet selection, not just creation</h4><p><code>exportToSheets()</code> always creates a new spreadsheet on first export. Add a
+picker (Google Picker API or a simple &quot;paste a Sheet URL&quot; fallback) so PRD
+9.1&#x27;s &quot;selects or creates&quot; is both, not just creates.</p></li><li class="step"><h4>Fix the 6-vs-7 tab mismatch</h4><p>Code writes 7 tabs (<code>Sessions, Matches, Games, Competitive Games, Drills,     Players, Career Stats</code>); the PRD and the UI copy both say 6. Recommend
+folding <code>Games</code> into the <code>Matches</code> tab (each match&#x27;s rows followed by its
+game rows) rather than dropping data — see Questions.</p></li><li class="step"><h4>True background export + offline queue</h4><span class="reuse">Reuses: the syncWorker.ts polling pattern already built for Supabase sync</span><p>Today <code>doExport()</code> is an awaited promise inside the button handler — leaving
+the page mid-export aborts it. Move it into a durable queued job (reusing the
+existing IndexedDB queue infrastructure) so it survives navigation, and so
+PRD 9.3&#x27;s &quot;queued while offline, fires automatically on reconnect&quot; is real.</p></li></ol>
+<div class="sec"><h2 id="offline-sync-consistency-prd-1-3">Offline sync consistency (PRD §1.3)</h2><button class="mark" data-mark="offline-sync-consistency-prd-1-3" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="offline-sync-consistency-prd-1-3" hidden=""><label for="c-offline-sync-consistency-prd-1-3">Comment</label><textarea id="c-offline-sync-consistency-prd-1-3" data-input="offline-sync-consistency-prd-1-3" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<div class="block"><div class="block-head"><span class="block-kind">Decision</span><span class="block-name">Extend the IndexedDB-queue pattern to every mutation, or leave it scoped to the three call sites that use it today?</span></div><div class="block-body"><div class="opts"><div class="opt" data-picked="true"><div class="opt-h"><b>Extend db.ts&#x27;s dbInsert/dbUpdate/dbDelete to usePlayers.ts and useSessions.ts</b><span class="badge">Chosen</span></div><p>Today only three call sites go through the offline queue at all:
+<code>matchStore.endGame()</code>, <code>drillStore.commitHeat()</code>, and
+<code>sessionStore.setNotes()</code>. Every player mutation (<code>useAddPlayer</code>,
+<code>useUpdatePlayer</code>, <code>useDeletePlayer</code>) and every session-lifecycle mutation
+(<code>useOpenSession</code>, <code>useEndSession</code>, <code>useActivateSession</code>) calls
+<code>supabase.from(...)</code> directly — if offline, these simply throw with no
+retry. PRD 1.3 says &quot;all user interactions write to a local queue first,&quot;
+and right now most don&#x27;t. Routing these through <code>dbInsert</code>/<code>dbUpdate</code> costs
+a signature change per call site, not new infrastructure — the queue,
+worker, and <code>StatusDot</code> already exist and already work correctly for the
+three sites that use them.</p></div><div class="opt" data-picked="false"><div class="opt-h"><b>Leave as-is; only the three highest-frequency-in-a-gym writes need it</b></div><p>Cheaper, but a scribe adding a walk-in player or ending a session while the
+gym wifi is down — exactly the scenario PRD 1.3 exists for — currently just
+fails with no recovery.</p></div></div></div></div>
+<ol class="steps"><li class="step"><h4>Route usePlayers.ts and useSessions.ts mutations through db.ts</h4><span class="reuse">Reuses: dbInsert/dbUpdate/dbDelete, unchanged</span><p>Swap each mutation&#x27;s direct <code>supabase.from(...)</code> call for the matching
+<code>dbInsert</code>/<code>dbUpdate</code>/<code>dbDelete</code>, matching the pattern already proven in the
+three existing call sites.</p></li><li class="step"><h4>Offline read path</h4><span class="reuse">Reuses: the idb dependency already in package.json</span><p>None of the <code>useQuery</code> reads (<code>usePlayers</code>, <code>useSessions</code>, etc.) have a local
+mirror today — offline reads currently just fail/hang. Add a lightweight
+IndexedDB read cache populated on successful fetch, served when offline, so
+the UI has something to show (even if stale) per PRD 1.3&#x27;s &quot;UI always reads
+from local state.&quot;</p></li></ol>
+<div class="sec"><h2 id="bug-fixes-v5-5-v5-6-prd-12">Bug fixes — v5.5 / v5.6 (PRD §12)</h2><button class="mark" data-mark="bug-fixes-v5-5-v5-6-prd-12" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="bug-fixes-v5-5-v5-6-prd-12" hidden=""><label for="c-bug-fixes-v5-5-v5-6-prd-12">Comment</label><textarea id="c-bug-fixes-v5-5-v5-6-prd-12" data-input="bug-fixes-v5-5-v5-6-prd-12" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<p>Cross-checked against the actual components rather than assumed from the PRD&#x27;s
+descriptions — two of the six areas turned out to already be fixed.</p>
+<p>| Area | PRD says | Actual finding |
+| --- | --- | --- |
+| Global dark-mode button text | Any non-white text on a button is a bug | <strong>Already clean.</strong> <code>Button.tsx</code>&#x27;s five variants (primary/secondary/ghost/danger/icon) use white, chalk, or red-on-red-tint — no blue anywhere. The retheme above should keep it that way, not re-introduce it. |
+| Card/pill/button padding | No text touching a border | <strong>Already clean.</strong> Every <code>Card</code>/<code>Tag</code> variant has explicit non-zero padding; no <code>p-0</code>/zero-gap pattern found outside one intentional inline &quot;back&quot; link. |
+| 12.1 Players — Roster screen | Wider search bar, spacing, pill shows Name not two-letter nickname, W/L pill | Real gaps: rows show nickname (bold) + full name already close, but no W-L pill — folded into the Player Profile section&#x27;s &quot;W-L pill on the roster list&quot; step above. |
+| 12.2 Player Card screen | Name/nickname editable, header pill/padding | Real gap — folded into &quot;Editable name, nickname, and shooting targets&quot; above. |
+| 12.3 Calendar screen | Pills not dots, gaps between day squares, tap behavior | Real gap — folded into &quot;Calendar month pills&quot; and the Start Now/Review Details steps above. |
+| 12.4/12.5 Player picker (session start &amp; live session) | Persistent modal, not free text | Real gap — this is exactly the Player Picker Modal built once in Global UI Primitives. |
+| 12.6 New Match setup order | Scoring style first, Players section, Shuffle/Re-shuffle/manual | Real gap — folded into the Matches &quot;Make Duration Wave a real mode&quot; and &quot;Wire manual team reassignment&quot; steps above. |
+| 12.7 Light/Dark toggle | Add toggle, verify light mode | Real gap — this is the Global UI Primitives theme Decision and Step above. |</p>
+<div class="sec"><h2 id="not-doing">Not doing</h2><button class="mark" data-mark="not-doing" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="not-doing" hidden=""><label for="c-not-doing">Comment</label><textarea id="c-not-doing" data-input="not-doing" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<p>Carried forward from PRD §10, plus one plan-scoped deferral:</p>
+<ul>
+<li><strong>Player photos.</strong> Deferred to v2 per PRD — Supabase free-tier storage limit.</li>
+<li><strong>Fairness-weighted randomizer.</strong> Needs session history volume that doesn&#x27;t exist yet.</li>
+<li><strong>Session goals/intentions, date-range filters, charts/trend visualization, cross-session heat trend aggregates, catch-and-shoot tagging, Apple Watch, friends&#x27;-data ingestion.</strong> All explicitly deferred in PRD §10 — no reason to pull any forward.</li>
+<li><strong>Interior shot sub-parameters (approach/finish/footwork).</strong> PRD defers these; this plan&#x27;s shot-type rollup (Drills section) only fixes the existing 3-bucket career stat, it doesn&#x27;t add new sub-tagging.</li>
+<li><strong>A full local-first read cache with conflict UI.</strong> The Offline Sync section above adds a queue for writes and a basic read cache for the offline case, but a richer merge/conflict-preview UI is out of scope — there&#x27;s no concurrent-writer scenario to justify it (see the LWW Decision above).</li>
+</ul>
+<div class="sec"><h2 id="verification">Verification</h2><button class="mark" data-mark="verification" type="button" title="Comment on this section">¶</button><div class="cmt" data-cmt="verification" hidden=""><label for="c-verification">Comment</label><textarea id="c-verification" data-input="verification" placeholder="What is wrong, missing, or risky here?"></textarea></div></div>
+<ul>
+<li><strong>Drills data-integrity fix:</strong> after wiring Step 4, run a 2-player group drill
+and confirm both <code>heat_entries.player_id</code> values in Supabase are real UUIDs,
+not <code>&#x27;&#x27;</code>. This is the single most important check in this plan.</li>
+<li><strong>Duration Wave mode:</strong> start a match, switch to Wave, confirm the Target
+input disappears and a running countdown with an audible alarm at zero
+appears; confirm <code>matches.scoring_style</code> persists as <code>&#x27;durationWave&#x27;</code>.</li>
+<li><strong>Offline queue extension:</strong> toggle devtools offline, add a new player and end
+a session, confirm both appear in <code>getPendingCount()</code> and <code>StatusDot</code> shows
+&quot;Offline&quot;; go back online and confirm both rows land in Supabase within one
+30s poll cycle.</li>
+<li><strong>Theme toggle:</strong> set System/Light/Dark in Settings, reload the page, confirm
+the choice survives (localStorage) and every screen — not just Dashboard —
+renders the corresponding palette with no contrast regressions.</li>
+<li><strong>Shot chart taxonomy:</strong> log a drill heat at a newly-added spot (e.g. left
+block) and confirm its zone on <code>ShotChart.tsx</code> updates from the mock number to
+the real make/attempt count.</li>
+<li><strong>WinLossPage:</strong> open two different players&#x27; <code>/players/:id/wl</code> and confirm the
+numbers differ and match each player&#x27;s actual <code>games</code> history.</li>
+</ul>
+<div class="qform"><header><h3>Open questions</h3><p>Answer these and use Copy review — nothing is sent anywhere.</p></header><div class="q" data-q="tab-count" data-title="Sheets export: fold Games into Matches (6 tabs), or update the PRD/UI copy to say 7?"><p class="q-title">Sheets export: fold Games into Matches (6 tabs), or update the PRD/UI copy to say 7?</p><p class="q-detail">Code already writes a separate Games tab beyond the PRD&#x27;s 6-tab list. Folding it into Matches keeps the PRD&#x27;s number but changes the Matches tab&#x27;s row shape; keeping 7 tabs is less work but means the PRD text and UI copy both need a one-word edit.</p><div class="q-opts"><label class="q-opt"><input type="radio" data-qin="tab-count" name="q-tab-count" value="Fold Games into Matches"/><span>Fold Games into Matches<span class="rec">  Recommended</span><small>Matches spec&#x27;s tab count; each match&#x27;s rows followed by its per-game rows.</small></span></label><label class="q-opt"><input type="radio" data-qin="tab-count" name="q-tab-count" value="Keep 7 tabs, update copy"/><span>Keep 7 tabs, update copy<small>Less engineering, but the PRD and in-app &#x27;Overwrites all 6 tabs&#x27; copy both need fixing.</small></span></label></div><textarea data-qfree="tab-count" placeholder="Other / notes…"></textarea></div><div class="q" data-q="mid-post-threshold" data-title="Do the two interior &#x27;low block&#x27; zones use Paint thresholds or Mid-Range thresholds?"><p class="q-title">Do the two interior &#x27;low block&#x27; zones use Paint thresholds or Mid-Range thresholds?</p><p class="q-detail">PRD 4.4&#x27;s zone-group table lists &#x27;Interior Mid-Range (2): Left/Right low block&#x27; as distinct from &#x27;Mid-Post (2)&#x27;, but the color-threshold table only defines &#x27;Mid-Range (incl. mid-post)&#x27; and &#x27;Paint/Interior&#x27; as categories — low block isn&#x27;t named in either. Current code types low-block zones as &#x27;paint&#x27; (mid-post as &#x27;mid&#x27;), which this plan leaves unchanged absent a correction.</p><div class="q-opts"><label class="q-opt"><input type="radio" data-qin="mid-post-threshold" name="q-mid-post-threshold" value="Keep current (low block = paint, mid-post = mid)"/><span>Keep current (low block = paint, mid-post = mid)<small>Low block is physically closer to the rim than mid-post; paint-style thresholds (80/51/≤50) fit that shot difficulty better.</small></span></label><label class="q-opt"><input type="radio" data-qin="mid-post-threshold" name="q-mid-post-threshold" value="Move low block to Mid-Range thresholds too"/><span>Move low block to Mid-Range thresholds too<small>Groups everything the PRD&#x27;s zone table calls &#x27;...Mid-Range&#x27; under one threshold set, even though low block sits inside the restricted-area radius.</small></span></label></div><textarea data-qfree="mid-post-threshold" placeholder="Other / notes…"></textarea></div><div class="q" data-q="tie-break-math" data-title="Match tie-breaker: PRD 5.3 says &#x27;smallest aggregate point differential&#x27; decides the winner when game-wins tie — smallest doesn&#x27;t obviously pick a winner. What&#x27;s the intended math?"><p class="q-title">Match tie-breaker: PRD 5.3 says &#x27;smallest aggregate point differential&#x27; decides the winner when game-wins tie — smallest doesn&#x27;t obviously pick a winner. What&#x27;s the intended math?</p><p class="q-detail">A smaller differential reads as &#x27;closer,&#x27; not &#x27;more dominant&#x27; — the more natural tie-break would be largest cumulative point differential favoring the team ahead. This plan implements largest-aggregate-diff-wins, Draw if still equal, but the PRD&#x27;s literal wording says the opposite.</p><div class="q-opts"><label class="q-opt"><input type="radio" data-qin="tie-break-math" name="q-tie-break-math" value="Largest aggregate differential wins"/><span>Largest aggregate differential wins<small>Team ahead on cumulative points across all games takes the match when game-wins are tied.</small></span></label><label class="q-opt"><input type="radio" data-qin="tie-break-math" name="q-tie-break-math" value="Follow the PRD literally: smallest differential wins"/><span>Follow the PRD literally: smallest differential wins<small>Implements the text as written, even though it rewards the closer-scoring team over the more dominant one.</small></span></label></div><textarea data-qfree="tie-break-math" placeholder="Other / notes…"></textarea></div><div class="q" data-q="activity-log-cap" data-title="PRD §11: does &#x27;View More&#x27; on the player activity log cap out, or load indefinitely?"><p class="q-title">PRD §11: does &#x27;View More&#x27; on the player activity log cap out, or load indefinitely?</p><p class="q-detail">Carried directly from the PRD&#x27;s own open question. Affects whether useRecentPlayerActivity needs a hard limit param or true infinite offset pagination.</p><div class="q-opts"><label class="q-opt"><input type="radio" data-qin="activity-log-cap" name="q-activity-log-cap" value="No cap — always load all"/><span>No cap — always load all<small>Simplest; matches PRD 3.9&#x27;s &#x27;available for all past sessions without limit&#x27; precedent.</small></span></label><label class="q-opt"><input type="radio" data-qin="activity-log-cap" name="q-activity-log-cap" value="Cap at a fixed number (e.g. 50)"/><span>Cap at a fixed number (e.g. 50)<small>Bounds query cost for very long-tenured players, at the cost of a dead-end &#x27;View More&#x27; button.</small></span></label></div><textarea data-qfree="activity-log-cap" placeholder="Other / notes…"></textarea></div><div class="q" data-q="recap-auto-show" data-title="PRD §11: is Session Recap shown automatically on End Session, or opt-in?"><p class="q-title">PRD §11: is Session Recap shown automatically on End Session, or opt-in?</p><p class="q-detail">Carried directly from the PRD&#x27;s own open question — affects whether ending a session always navigates to the recap route or leaves that as a link from the dashboard.</p><div class="q-opts"><label class="q-opt"><input type="radio" data-qin="recap-auto-show" name="q-recap-auto-show" value="Automatic on End Session"/><span>Automatic on End Session<small>Matches the existing MatchRecapPage/DrillRecapPage precedent — both already show automatically on their respective &#x27;End&#x27; actions.</small></span></label><label class="q-opt"><input type="radio" data-qin="recap-auto-show" name="q-recap-auto-show" value="Opt-in from Dashboard"/><span>Opt-in from Dashboard<small>Less friction ending a session quickly, but breaks the pattern every other recap screen already follows.</small></span></label></div><textarea data-qfree="recap-auto-show" placeholder="Other / notes…"></textarea></div></div>
+</main>
+</div>
+<div class="reviewbar">
+  <span class="fill" id="count"></span>
+  <button class="btn pri" id="copy" type="button">Copy review</button>
+</div>
+<dialog id="out">
+  <header><h3>Your review</h3><p id="copystate">Select all and copy, then paste it back into your agent.</p></header>
+  <textarea id="outtext" readonly></textarea>
+  <footer>
+    <button class="btn" id="close" type="button">Close</button>
+    <button class="btn pri" id="recopy" type="button">Copy</button>
+  </footer>
+</dialog>
+<script>
+(function(){
+  var d=document, root=d.documentElement;
+  try{var t=localStorage.getItem('lp-theme'); if(t) root.dataset.theme=t;}catch(e){}
+  d.getElementById('theme').onclick=function(){
+    var cur=root.dataset.theme||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+    var next=cur==='dark'?'light':'dark'; root.dataset.theme=next;
+    try{localStorage.setItem('lp-theme',next);}catch(e){}
+  };
+
+  var links=[].slice.call(d.querySelectorAll('.spine a'));
+  var heads=links.map(function(a){return d.getElementById(a.hash.slice(1));}).filter(Boolean);
+  function spy(){
+    var y=scrollY+140, cur=heads[0];
+    heads.forEach(function(h){ if(h.offsetTop<=y) cur=h; });
+    links.forEach(function(a){ a.classList.toggle('on', cur && a.hash==='#'+cur.id); });
+  }
+  addEventListener('scroll',spy,{passive:true}); spy();
+
+  [].forEach.call(d.querySelectorAll('.mark'),function(b){
+    b.onclick=function(){
+      var box=d.querySelector('[data-cmt="'+b.dataset.mark+'"]');
+      box.hidden=!box.hidden; if(!box.hidden) box.querySelector('textarea').focus();
+    };
+  });
+
+  function comments(){
+    return [].slice.call(d.querySelectorAll('[data-input]'))
+      .filter(function(t){return t.value.trim();})
+      .map(function(t){return {sec:t.dataset.input, text:t.value.trim()};});
+  }
+  function answers(){
+    return [].slice.call(d.querySelectorAll('.q')).map(function(q){
+      var pick=q.querySelector('input[data-qin]:checked');
+      var free=q.querySelector('[data-qfree]');
+      var note=free?free.value.trim():'';
+      if(!pick && !note) return null;
+      return {title:q.dataset.title, pick:pick?pick.value:'', note:note};
+    }).filter(Boolean);
+  }
+  function sync(){
+    var c=comments().length, a=answers().length,
+        total=d.querySelectorAll('.q').length;
+    d.getElementById('count').innerHTML='<b>'+a+'</b>/'+total+' questions answered &middot; <b>'+c+'</b> comment'+(c===1?'':'s');
+    [].forEach.call(d.querySelectorAll('.mark'),function(b){
+      var t=d.querySelector('[data-input="'+b.dataset.mark+'"]');
+      b.classList.toggle('has', !!(t&&t.value.trim()));
+    });
+    [].forEach.call(d.querySelectorAll('.q-opt'),function(l){
+      l.classList.toggle('sel', l.querySelector('input').checked);
+    });
+  }
+  d.addEventListener('input',sync); d.addEventListener('change',sync); sync();
+
+  function build(){
+    var out=['# Review: '+d.title,''];
+    var a=answers();
+    if(a.length){ out.push('## Answers',''); a.forEach(function(x){
+      out.push('**'+x.title+'**'); if(x.pick) out.push('- Chose: '+x.pick);
+      if(x.note) out.push('- Note: '+x.note); out.push('');
+    });}
+    var c=comments();
+    if(c.length){ out.push('## Comments',''); c.forEach(function(x){
+      out.push('**On "'+x.sec+'"**'); out.push(x.text); out.push('');
+    });}
+    if(!a.length && !c.length) out.push('_No comments — approved as written._');
+    return out.join('\n');
+  }
+
+  var dlg=d.getElementById('out'), ta=d.getElementById('outtext');
+  d.getElementById('copy').onclick=function(){
+    ta.value=build(); dlg.showModal(); ta.select();
+    try{ navigator.clipboard.writeText(ta.value).then(function(){
+      d.getElementById('copystate').textContent='Copied to clipboard — paste it back into your agent.';
+    },function(){}); }catch(e){}
+  };
+  d.getElementById('recopy').onclick=function(){
+    ta.select(); try{ d.execCommand('copy'); }catch(e){}
+    try{ navigator.clipboard.writeText(ta.value); }catch(e){}
+  };
+  d.getElementById('close').onclick=function(){ dlg.close(); };
+})();
+</script>
+</body>
+</html>
