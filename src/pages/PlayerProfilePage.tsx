@@ -7,16 +7,113 @@ import { Icons } from '../components/ui/icons'
 import { ShotChart } from '../components/ui/ShotChart'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { useAttendanceStats } from '../hooks/useAttendanceStats'
-import { usePlayer } from '../hooks/usePlayers'
+import { usePlayer, useUpdatePlayer } from '../hooks/usePlayers'
 import { usePlayerWL, usePlayerShooting } from '../hooks/usePlayerStats'
 import { playerColor } from '../utils/playerColor'
+import { isPlayerEditValid, fractionToPercentInput, percentInputToFraction } from '../utils/playerEditForm'
 import { supabase } from '../lib/supabase'
-import type { ChartMode, HeatEntry } from '../types'
+import type { ChartMode, HeatEntry, Player } from '../types'
+
+// ── Edit Player sheet (PRD §4.1) ────────────────────────────────────────────
+// Opened from the pencil affordance on the hero card below. Same bottom-sheet
+// shell and required-field validation pattern as `PlayersPage.tsx`'s
+// `AddPlayerSheet`, plus three plain number inputs (0-100) for the shooting
+// targets, pre-filled from the player's current target_*_percent (x100) and
+// converted back to the stored 0-1 range on save via useUpdatePlayer() —
+// that hook already existed with zero call sites before this task.
+function EditPlayerSheet({ player, onClose }: { player: Player; onClose: () => void }) {
+  const [name, setName] = useState(player.name)
+  const [nickname, setNickname] = useState(player.nickname)
+  const [ftPercent, setFtPercent] = useState(String(fractionToPercentInput(player.target_ft_percent)))
+  const [midPercent, setMidPercent] = useState(String(fractionToPercentInput(player.target_mid_percent)))
+  const [tptPercent, setTptPercent] = useState(String(fractionToPercentInput(player.target_3pt_percent)))
+  const updatePlayer = useUpdatePlayer()
+
+  const canSave = isPlayerEditValid(name, nickname)
+
+  async function handleSave() {
+    if (!canSave) return
+    await updatePlayer.mutateAsync({
+      id: player.id,
+      name: name.trim(),
+      nickname: nickname.trim(),
+      target_ft_percent: percentInputToFraction(Number(ftPercent)),
+      target_mid_percent: percentInputToFraction(Number(midPercent)),
+      target_3pt_percent: percentInputToFraction(Number(tptPercent)),
+    })
+    onClose()
+  }
+
+  const textInputStyle = (filled: boolean) => ({
+    width: '100%', background: 'var(--panel-2)', border: `1px solid ${filled ? 'var(--orange)' : 'var(--line-2)'}`,
+    borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none',
+    fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' as const,
+  })
+
+  const numberInputStyle = {
+    width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line-2)',
+    borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none',
+    fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' as const,
+  }
+
+  const labelStyle = { fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }}
+      onClick={onClose}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}>
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 20 }}>Edit Player</div>
+
+        <label style={{ display: 'block', marginBottom: 14 }}>
+          <p style={labelStyle}>Full Name <span style={{ color: 'var(--orange)' }}>*</span></p>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Jordan Carter" autoFocus style={textInputStyle(name.trim().length > 0)} />
+        </label>
+        <label style={{ display: 'block', marginBottom: 20 }}>
+          <p style={labelStyle}>Nickname <span style={{ color: 'var(--orange)' }}>*</span></p>
+          <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="e.g. JC" style={textInputStyle(nickname.trim().length > 0)} />
+        </label>
+
+        <p style={labelStyle}>Shooting Targets (%)</p>
+        <div className="flex gap-2.5" style={{ marginBottom: 24 }}>
+          <label style={{ flex: 1 }}>
+            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>FT%</p>
+            <input type="number" min={0} max={100} value={ftPercent} onChange={(e) => setFtPercent(e.target.value)} style={numberInputStyle} />
+          </label>
+          <label style={{ flex: 1 }}>
+            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>Mid%</p>
+            <input type="number" min={0} max={100} value={midPercent} onChange={(e) => setMidPercent(e.target.value)} style={numberInputStyle} />
+          </label>
+          <label style={{ flex: 1 }}>
+            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>3PT%</p>
+            <input type="number" min={0} max={100} value={tptPercent} onChange={(e) => setTptPercent(e.target.value)} style={numberInputStyle} />
+          </label>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!canSave || updatePlayer.isPending}
+          style={{
+            width: '100%', minHeight: 58, background: canSave ? 'linear-gradient(180deg, var(--orange-2), var(--orange))' : 'var(--panel-2)',
+            border: 'none', borderRadius: 'var(--r-md)', color: canSave ? '#fff' : 'var(--faint)',
+            fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 16, textTransform: 'uppercase', letterSpacing: '0.04em',
+            cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? 'var(--accent-glow)' : 'none',
+          }}
+        >
+          {updatePlayer.isPending ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function PlayerProfilePage() {
   const nav = useNavigate()
   const { id: playerId = '' } = useParams()
   const [chartMode, setChartMode] = useState<ChartMode | null>(null)
+  const [showEdit, setShowEdit] = useState(false)
 
   const { data: player } = usePlayer(playerId)
   const { data: attStats } = useAttendanceStats(playerId)
@@ -74,8 +171,17 @@ export default function PlayerProfilePage() {
           <div className="flex gap-3.5 items-center">
             <Avatar nickname={player.nickname} color={color} variant="active" size={62} />
             <div className="flex-1">
-              <div className="font-heading text-[20px]">
-                {player.name.split(' ')[0]} <span style={{ color: 'rgba(255,255,255,0.45)' }}>/ {player.nickname}</span>
+              <div className="font-heading text-[20px] flex items-center gap-2">
+                <span>{player.name.split(' ')[0]} <span style={{ color: 'rgba(255,255,255,0.45)' }}>/ {player.nickname}</span></span>
+                <button
+                  type="button"
+                  onClick={() => setShowEdit(true)}
+                  aria-label="Edit player"
+                  className="cursor-pointer border-0"
+                  style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', background: 'none', color: 'rgba(255,255,255,0.45)', padding: 0, flexShrink: 0 }}
+                >
+                  <span style={{ width: 14, height: 14 }}>{Icons.edit}</span>
+                </button>
               </div>
               <button
                 onClick={() => nav(`/players/${player.id}/wl`)}
@@ -178,6 +284,11 @@ export default function PlayerProfilePage() {
           playerName={player.nickname}
           heatEntries={heatEntries}
         />
+      )}
+
+      {/* Edit player sheet, opened via the pencil affordance on the hero card */}
+      {showEdit && (
+        <EditPlayerSheet player={player} onClose={() => setShowEdit(false)} />
       )}
     </>
   )
