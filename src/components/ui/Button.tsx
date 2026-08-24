@@ -7,7 +7,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({ variant = 'primary', size = 'normal', className = '', children, ...props }: ButtonProps) {
-  const base = 'flex items-center justify-center gap-2.5 w-full font-heading uppercase tracking-wide cursor-pointer border-0 transition-all duration-100 active:scale-[.975]'
+  // "Guard instead of disable" call sites that never pass `disabled` are
+  // unaffected by this — it only styles the button when the `disabled`
+  // attribute is actually set (see AttendancePage/CalendarPage/
+  // MatchSetupPage for existing real usages that were previously
+  // invisible: disabled worked functionally but looked identical to
+  // enabled, final-review Finding E.3).
+  const base = 'flex items-center justify-center gap-2.5 w-full font-heading uppercase tracking-wide cursor-pointer border-0 transition-all duration-100 active:scale-[.975] disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none disabled:active:scale-100'
 
   const variants: Record<string, string> = {
     primary:   'text-white rounded-[var(--r-md)] shadow-[var(--accent-glow)]',

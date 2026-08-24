@@ -196,7 +196,18 @@ describe('drillStore — stale currentPlayerIndex after re-selecting a smaller r
 })
 
 describe('drillStore — solo drill (no players selected)', () => {
-  it('still commits heats when players is empty, without being blocked', () => {
+  // This pins a store-level fallback, not desired product behavior: the
+  // store itself doesn't guard against an empty `players` array, so
+  // commitHeat() happily records a heat with playerId ''. Task 9's review
+  // found that exact case ('' as a real playerId reaching heat_entries) to
+  // be a data-integrity bug, and closed the UI path to it — DrillPage's
+  // Step 4 now requires players.length > 0 before "Next →" advances (see
+  // DrillPage.test.tsx, "Step 4 requires at least one player"), so this
+  // state is unreachable through the app today. Kept here anyway because
+  // the store's own fallback behavior is unchanged and still worth pinning
+  // — if this test's expectations ever need to change, the assumption
+  // that Step 4 fully guards this should be re-verified first.
+  it('store-level fallback: commits a heat with playerId \'\' when players is empty (unreachable via the UI since Task 9)', () => {
     buildChain()
     useDrillStore.getState().setMakes(10)
     const { drillComplete } = useDrillStore.getState().commitHeat()
