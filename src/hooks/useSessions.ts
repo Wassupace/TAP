@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { Session, SessionAttendance } from '../types'
+import { buildRecurringSessionDates } from '../utils/recurringSessions'
 
 export function useSessions(year: number, month: number) {
   return useQuery({
@@ -141,6 +142,48 @@ export function useCreatePlannedSession() {
     onSuccess: (s) => {
       qc.invalidateQueries({ queryKey: ['sessions'] })
       qc.setQueryData(['session', s.id], s)
+    },
+  })
+}
+
+// Task 6 (PRD §3.2): the "Repeat weekly" toggle on PlanSessionSheet. Creates
+// the fixed 8-session horizon in one batched `.insert([...])` (an array of
+// row objects), not 8 separate requests — a deliberate separate hook rather
+// than an added param on `useCreatePlannedSession()` above, since the two
+// return shapes differ (one row vs. an array) and this keeps that hook's
+// existing single-session callers/signature untouched. Every row shares
+// `is_recurring: true` and the same `recurrence_weekday` (the selected
+// date's JS day-of-week) — see `buildRecurringSessionDates()` for the date
+// math itself.
+export function useCreateRecurringSessions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      location,
+      date,
+      expectedPlayerIds = [],
+    }: {
+      location: string
+      date: string
+      expectedPlayerIds?: string[]
+    }) => {
+      const rows = buildRecurringSessionDates(date).map(({ date: rowDate, weekday }) => ({
+        location,
+        date: rowDate,
+        state: 'planned' as const,
+        is_recurring: true,
+        recurrence_weekday: weekday,
+        expected_player_ids: expectedPlayerIds,
+      }))
+      const { data, error } = await supabase
+        .from('sessions')
+        .insert(rows)
+        .select()
+      if (error) throw error
+      return data as Session[]
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sessions'] })
     },
   })
 }

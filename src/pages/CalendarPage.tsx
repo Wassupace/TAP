@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackButton, Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
-import { useSessions, useOpenSession, useCreatePlannedSession, useTodaysPlannedSession, useLocationHistory } from '../hooks/useSessions'
+import { useSessions, useOpenSession, useCreatePlannedSession, useCreateRecurringSessions, useTodaysPlannedSession, useLocationHistory } from '../hooks/useSessions'
 import { useStartPlannedSession } from '../hooks/useStartPlannedSession'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { useSessionStore } from '../stores/sessionStore'
@@ -358,15 +358,28 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
   const [location, setLocation] = useState('')
   const [expectedPlayerIds, setExpectedPlayerIds] = useState<string[]>([])
   const [showPlayerPicker, setShowPlayerPicker] = useState(false)
+  // Task 6 (PRD §3.2): "Repeat weekly" — when on, confirming this sheet
+  // creates a fixed 8-session horizon (this date + 7 more, 7 days apart)
+  // via useCreateRecurringSessions() instead of the single session below.
+  // No server-side job backs this — see task-6-report.md's "known
+  // limitation" for why a further-out ask means planning again later.
+  const [repeatWeekly, setRepeatWeekly] = useState(false)
   const createPlannedSession = useCreatePlannedSession()
+  const createRecurringSessions = useCreateRecurringSessions()
   const { data: locationHistory = [] } = useLocationHistory()
 
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  const weekdayLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long' })
+  const isPending = createPlannedSession.isPending || createRecurringSessions.isPending
 
   async function handlePlanSession() {
     if (!location.trim()) return
     try {
-      await createPlannedSession.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
+      if (repeatWeekly) {
+        await createRecurringSessions.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
+      } else {
+        await createPlannedSession.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
+      }
       onClose()
     } catch {
       // Leave the sheet open on failure so the coach can retry — unlike the
@@ -412,8 +425,38 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
               : 'Add players'}
           </button>
 
-          <Button variant="primary" onClick={handlePlanSession} disabled={!location.trim() || createPlannedSession.isPending}>
-            {createPlannedSession.isPending ? 'Planning…' : 'Plan Session'}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            padding: '12px 14px', borderRadius: 'var(--r-md)', marginBottom: 24,
+            background: 'var(--panel-2)', border: '1px solid var(--line-2)',
+          }}>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--chalk)', margin: 0 }}>Repeat weekly</p>
+              <p style={{ fontSize: 11, color: 'var(--faint)', margin: '2px 0 0' }}>
+                Plans 8 sessions, every {weekdayLabel} starting {dateLabel}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={repeatWeekly}
+              onClick={() => setRepeatWeekly((v) => !v)}
+              style={{
+                flex: 'none', padding: '8px 16px', borderRadius: 'var(--r-sm)',
+                fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em',
+                border: repeatWeekly ? '1px solid var(--orange)' : '1px solid var(--line-2)',
+                background: repeatWeekly ? 'var(--orange)' : 'var(--panel)',
+                color: repeatWeekly ? '#fff' : 'var(--dim)',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >
+              {repeatWeekly ? 'On' : 'Off'}
+            </button>
+          </div>
+
+          <Button variant="primary" onClick={handlePlanSession} disabled={!location.trim() || isPending}>
+            {isPending ? 'Planning…' : repeatWeekly ? 'Plan 8 Sessions' : 'Plan Session'}
           </Button>
         </div>
       </div>

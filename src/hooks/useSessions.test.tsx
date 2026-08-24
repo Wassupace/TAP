@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 const { mockFrom } = vi.hoisted(() => ({ mockFrom: vi.fn() }))
 vi.mock('../lib/supabase', () => ({ supabase: { from: mockFrom } }))
 
-import { useCreatePlannedSession, useTodaysPlannedSession, useLocationHistory, dedupeLocationsByRecency } from './useSessions'
+import { useCreatePlannedSession, useCreateRecurringSessions, useTodaysPlannedSession, useLocationHistory, dedupeLocationsByRecency } from './useSessions'
 
 function buildInsertChain(result: { data?: unknown; error?: unknown }) {
   const chain = {
@@ -18,6 +18,20 @@ function buildInsertChain(result: { data?: unknown; error?: unknown }) {
   chain.insert.mockReturnValue(chain)
   chain.select.mockReturnValue(chain)
   chain.single.mockResolvedValue(result)
+  ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
+  return chain
+}
+
+// Task 6: the batch-insert path (`useCreateRecurringSessions`) never calls
+// `.single()` — it inserts an array and keeps the array back — so this
+// chain's `.select()` itself resolves, unlike `buildInsertChain` above.
+function buildBatchInsertChain(result: { data?: unknown; error?: unknown }) {
+  const chain = {
+    insert: vi.fn(),
+    select: vi.fn(),
+  }
+  chain.insert.mockReturnValue(chain)
+  chain.select.mockResolvedValue(result)
   ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
   return chain
 }
@@ -124,6 +138,95 @@ describe('useCreatePlannedSession', () => {
   it('rejects when Supabase returns an error', async () => {
     buildInsertChain({ data: null, error: new Error('offline') })
     const getHook = mountHook()
+
+    await expect(
+      act(async () => {
+        await getHook().mutateAsync({ location: 'Gym C', date: '2026-09-03' })
+      })
+    ).rejects.toThrow('offline')
+  })
+})
+
+// Same harness style as mountHook above, for useCreateRecurringSessions's
+// mutation instead.
+function mountRecurringHook(): () => ReturnType<typeof useCreateRecurringSessions> {
+  let captured: ReturnType<typeof useCreateRecurringSessions> | null = null
+  function Harness() {
+    captured = useCreateRecurringSessions()
+    return null
+  }
+  act(() => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>
+    )
+  })
+  return () => captured!
+}
+
+describe('useCreateRecurringSessions', () => {
+  it('inserts a single batched array of 8 rows, is_recurring with the selected date\'s weekday', async () => {
+    const chain = buildBatchInsertChain({ data: [{ id: 'r1' }], error: null })
+    const getHook = mountRecurringHook()
+
+    await act(async () => {
+      // 2026-09-01 is a Tuesday (getDay() === 2)
+      await getHook().mutateAsync({
+        location: 'Levallois Gym',
+        date: '2026-09-01',
+        expectedPlayerIds: ['p1'],
+      })
+    })
+
+    expect(mockFrom).toHaveBeenCalledWith('sessions')
+    // Single batched call — not one insert per session.
+    expect(chain.insert).toHaveBeenCalledTimes(1)
+    expect(chain.select).toHaveBeenCalledTimes(1)
+
+    const rows = chain.insert.mock.calls[0][0]
+    expect(Array.isArray(rows)).toBe(true)
+    expect(rows).toHaveLength(8)
+    expect(rows.map((r: { date: string }) => r.date)).toEqual([
+      '2026-09-01',
+      '2026-09-08',
+      '2026-09-15',
+      '2026-09-22',
+      '2026-09-29',
+      '2026-10-06',
+      '2026-10-13',
+      '2026-10-20',
+    ])
+    for (const row of rows) {
+      expect(row).toEqual({
+        location: 'Levallois Gym',
+        date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        state: 'planned',
+        is_recurring: true,
+        recurrence_weekday: 2,
+        expected_player_ids: ['p1'],
+      })
+    }
+  })
+
+  it('defaults expectedPlayerIds to an empty array on every row when omitted', async () => {
+    const chain = buildBatchInsertChain({ data: [], error: null })
+    const getHook = mountRecurringHook()
+
+    await act(async () => {
+      await getHook().mutateAsync({ location: 'Gym B', date: '2026-09-02' })
+    })
+
+    const rows = chain.insert.mock.calls[0][0]
+    expect(rows).toHaveLength(8)
+    for (const row of rows) {
+      expect(row.expected_player_ids).toEqual([])
+    }
+  })
+
+  it('rejects when Supabase returns an error', async () => {
+    buildBatchInsertChain({ data: null, error: new Error('offline') })
+    const getHook = mountRecurringHook()
 
     await expect(
       act(async () => {
