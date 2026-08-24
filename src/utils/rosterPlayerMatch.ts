@@ -20,3 +20,20 @@ export function idsMatchingRoster(players: Player[], roster: string[]): string[]
 export function newNicknamesFor(selected: Player[], roster: string[]): string[] {
   return selected.filter(p => !roster.includes(p.nickname)).map(p => p.nickname)
 }
+
+/**
+ * Nicknames already in a nickname-based roster whose matching player id is
+ * NOT present in a freshly confirmed picker selection — i.e. the roster
+ * entries to remove because the user unchecked an already-on-court player.
+ * Mirrors `idsMatchingRoster`'s matching rule (nickname equality) so a
+ * roster entry only shows up here if the picker could have represented it
+ * as a selectable, pre-checked row in the first place; a roster nickname
+ * with no matching player in `players` (e.g. that player was since deleted)
+ * is left untouched rather than guessed at.
+ */
+export function noLongerSelectedNicknames(players: Player[], roster: string[], selectedIds: string[]): string[] {
+  return roster.filter(nickname => {
+    const match = players.find(p => p.nickname === nickname)
+    return match !== undefined && !selectedIds.includes(match.id)
+  })
+}

@@ -7,10 +7,10 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { StatusDot } from '../components/ui/StatusDot'
 import { useOpenSession, useEndSession } from '../hooks/useSessions'
 import { useActivityFeed } from '../hooks/useActivityFeed'
-import { usePlayers } from '../hooks/usePlayers'
+import { useResolvePickedPlayers } from '../hooks/useResolvePickedPlayers'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { playerColor } from '../utils/playerColor'
-import { idsMatchingRoster, newNicknamesFor } from '../utils/rosterPlayerMatch'
+import { idsMatchingRoster, newNicknamesFor, noLongerSelectedNicknames } from '../utils/rosterPlayerMatch'
 
 function fmt(s: number) {
   const h = Math.floor(s / 3600)
@@ -49,28 +49,17 @@ function NewSessionModal({ onClose, onConfirm }: {
   const [location, setLocation] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [playerPickerOpen, setPlayerPickerOpen] = useState(false)
-  const { data: allPlayers = [], refetch: refetchPlayers } = usePlayers()
+  const { allPlayers, resolveIds } = useResolvePickedPlayers()
 
   const selectedPlayers = allPlayers.filter(p => selectedIds.includes(p.id))
   const canStart = location.trim().length > 0
 
   function handleStart() {
     if (!canStart) return
-    if (selectedPlayers.length === selectedIds.length) {
-      // Every selected id (including any just-created player) is already
-      // present in allPlayers — resolve immediately.
-      onConfirm(location.trim(), selectedPlayers.map(p => p.nickname))
-      return
-    }
-    // A selected id (the just-created player, most likely) isn't in
-    // allPlayers yet — useAddPlayer's onSuccess only kicks off an
-    // invalidation, it doesn't await the refetch, so confirming right after
-    // adding a new player can race ahead of it. Refetch explicitly and
-    // resolve against the fresh result instead of opening the session with
-    // an incomplete list that would silently drop the new player.
-    refetchPlayers().then(({ data }) => {
-      const fresh = (data ?? []).filter(p => selectedIds.includes(p.id))
-      onConfirm(location.trim(), fresh.map(p => p.nickname))
+    // resolveIds handles the new-player-creation race — see
+    // src/hooks/useResolvePickedPlayers.ts.
+    resolveIds(selectedIds).then((resolved) => {
+      onConfirm(location.trim(), resolved.map(p => p.nickname))
     })
   }
 
@@ -133,7 +122,7 @@ function NewSessionModal({ onClose, onConfirm }: {
                 width: '100%', minHeight: 46, marginBottom: 10,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 background: 'var(--panel-2)', border: '1px dashed var(--line-2)',
-                borderRadius: 'var(--r-sm)', color: 'var(--orange-2)', cursor: 'pointer',
+                borderRadius: 'var(--r-sm)', color: 'var(--orange)', cursor: 'pointer',
                 fontFamily: '"Archivo Expanded", Archivo, sans-serif',
                 fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em',
               }}
@@ -330,26 +319,20 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
   const { activeSessionId, clearActiveSession, notes, setNotes, players, addPlayer, removePlayer } = useSessionStore()
   const { status, pendingCount, lastSyncedAt } = useOnlineStatus()
   const [playerPickerOpen, setPlayerPickerOpen] = useState(false)
-  const { data: allPlayers = [], refetch: refetchPlayers } = usePlayers()
+  const { allPlayers, resolveIds } = useResolvePickedPlayers()
   const endSession = useEndSession()
   const { data: activities = [] } = useActivityFeed(activeSessionId)
 
   function handlePlayerPickerConfirm(ids: string[]) {
-    const resolved = allPlayers.filter(p => ids.includes(p.id))
-    if (resolved.length === ids.length) {
-      // Every selected id (including any just-created player) is already
-      // present in allPlayers — resolve immediately.
+    // Reconcile both directions (final-review Finding C): this used to be
+    // additive-only, so unchecking an already-on-court player and
+    // confirming silently did nothing. Removal only concerns players
+    // already on the roster, so it doesn't need to wait on resolveIds'
+    // race handling — only the add path (which may involve a
+    // just-created player not yet in the cache) does.
+    noLongerSelectedNicknames(allPlayers, players, ids).forEach(removePlayer)
+    resolveIds(ids).then((resolved) => {
       newNicknamesFor(resolved, players).forEach(addPlayer)
-      return
-    }
-    // A selected id (the just-created player, most likely) isn't in
-    // allPlayers yet — useAddPlayer's onSuccess only kicks off an
-    // invalidation, it doesn't await the refetch, so confirming right after
-    // adding a new player can race ahead of it. Refetch explicitly and
-    // resolve against the fresh result instead of dropping the new player.
-    refetchPlayers().then(({ data }) => {
-      const fresh = (data ?? []).filter(p => ids.includes(p.id))
-      newNicknamesFor(fresh, players).forEach(addPlayer)
     })
   }
 
@@ -396,7 +379,7 @@ function ActiveDashboard({ location, elapsed }: { location: string; elapsed: num
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16,
           }}>
             <div>
-              <p style={{ fontSize: 11, color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>
+              <p style={{ fontSize: 11, color: 'var(--hero-eyebrow)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>
                 Active Session
               </p>
               <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 19 }}>

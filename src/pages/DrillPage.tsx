@@ -5,7 +5,7 @@ import { Avatar } from '../components/ui/Avatar'
 import { Icons } from '../components/ui/icons'
 import { useDrillStore } from '../stores/drillStore'
 import { useSessionStore } from '../stores/sessionStore'
-import { usePlayers } from '../hooks/usePlayers'
+import { useResolvePickedPlayers } from '../hooks/useResolvePickedPlayers'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { NumberPad } from '../components/ui/NumberPad'
 import { playerColor } from '../utils/playerColor'
@@ -32,7 +32,7 @@ export default function DrillPage() {
   } = useDrillStore()
   const { activeSessionId } = useSessionStore()
 
-  const { data: allPlayers = [], refetch: refetchPlayers } = usePlayers()
+  const { resolveIds } = useResolvePickedPlayers()
 
   const [setupStep, setSetupStep] = useState<number | null>(0)
   const [toastVisible, setToastVisible] = useState(false)
@@ -64,7 +64,9 @@ export default function DrillPage() {
         .single()
       if (!error && data) setDrillId(data.id)
     } catch {
-      // Offline — drillId stays null, heats will be queued without drill FK
+      // Offline — drillId stays null. commitHeat()'s `if (drillId)` gate
+      // means any heats logged during this drill are never persisted (not
+      // queued for later) until a drill row exists.
     }
     setSetupStep(null)
   }
@@ -262,7 +264,7 @@ export default function DrillPage() {
                   borderRadius: 'var(--r-md)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   background: 'var(--panel-2)', border: '1px dashed var(--line-2)',
-                  color: 'var(--orange-2)', cursor: 'pointer',
+                  color: 'var(--orange)', cursor: 'pointer',
                   fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em',
                   fontFamily: '"Archivo Expanded", Archivo, sans-serif',
                 }}
@@ -335,24 +337,10 @@ export default function DrillPage() {
           isOpen={playerPickerOpen}
           selectedIds={players.map(p => p.id)}
           onConfirm={(ids) => {
-            const resolved = allPlayers.filter(p => ids.includes(p.id))
-            if (resolved.length === ids.length) {
-              // Every selected id (including any just-created player) is
-              // already present in allPlayers — resolve immediately.
+            // resolveIds handles the new-player-creation race (task-3 review
+            // Finding 2) — see src/hooks/useResolvePickedPlayers.ts.
+            resolveIds(ids).then((resolved) => {
               setPlayers(resolved)
-              setCurrentPlayerIndex(0)
-              return
-            }
-            // A selected id (the just-created player, most likely) isn't in
-            // allPlayers yet — useAddPlayer's onSuccess only kicks off an
-            // invalidation, it doesn't await the refetch, so tapping Confirm
-            // right after adding a new player can race ahead of it. Refetch
-            // explicitly and resolve against the fresh result instead of
-            // calling setPlayers with an incomplete list that would silently
-            // drop the new player (task-3 review Finding 2).
-            refetchPlayers().then(({ data }) => {
-              const freshResolved = (data ?? []).filter(p => ids.includes(p.id))
-              setPlayers(freshResolved)
               setCurrentPlayerIndex(0)
             })
           }}

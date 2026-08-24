@@ -191,9 +191,9 @@ export function PlayerPickerModal({ isOpen, selectedIds, onConfirm, onClose }: P
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, width: '100%',
                     padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
-                    background: isSelected ? 'rgba(255,90,31,0.12)' : 'var(--panel-2)',
-                    border: `1px solid ${isSelected ? 'rgba(255,90,31,0.3)' : 'var(--line)'}`,
-                    borderLeft: isSelected ? '3px solid var(--orange)' : `1px solid ${isSelected ? 'rgba(255,90,31,0.3)' : 'var(--line)'}`,
+                    background: isSelected ? 'var(--orange-soft)' : 'var(--panel-2)',
+                    border: `1px solid ${isSelected ? 'var(--orange-soft)' : 'var(--line)'}`,
+                    borderLeft: isSelected ? '3px solid var(--orange)' : `1px solid ${isSelected ? 'var(--orange-soft)' : 'var(--line)'}`,
                     borderRadius: 'var(--r-sm)',
                   }}
                 >
@@ -228,7 +228,7 @@ export function PlayerPickerModal({ isOpen, selectedIds, onConfirm, onClose }: P
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 padding: '12px 14px', borderRadius: 'var(--r-md)',
                 background: 'var(--panel-2)', border: '1px dashed var(--line-2)',
-                color: 'var(--orange-2)', fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                color: 'var(--orange)', fontFamily: '"Archivo Expanded", Archivo, sans-serif',
                 fontWeight: 800, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em',
                 cursor: 'pointer',
               }}

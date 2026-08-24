@@ -35,7 +35,9 @@ export default function MatchSetupPage() {
         .single()
       if (!error && data) setMatchId(data.id)
     } catch {
-      // Offline — matchId stays null, games will be queued without match FK
+      // Offline — matchId stays null. endGame()'s `if (matchId)` gate means
+      // any games logged during this match are never persisted (not
+      // queued for later) until a match row exists.
     }
     nav('/match/active')
   }
