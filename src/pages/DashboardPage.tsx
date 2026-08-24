@@ -5,7 +5,8 @@ import { Icons } from '../components/ui/icons'
 import { Avatar } from '../components/ui/Avatar'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { StatusDot } from '../components/ui/StatusDot'
-import { useOpenSession, useEndSession } from '../hooks/useSessions'
+import { useOpenSession, useEndSession, useTodaysPlannedSession } from '../hooks/useSessions'
+import { useStartPlannedSession } from '../hooks/useStartPlannedSession'
 import { useActivityFeed } from '../hooks/useActivityFeed'
 import { useResolvePickedPlayers } from '../hooks/useResolvePickedPlayers'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
@@ -195,6 +196,82 @@ function NewSessionModal({ onClose, onConfirm }: {
   )
 }
 
+// ── Ad-hoc-on-a-planned-day disambiguation (PRD §3.3, Task 4) ───────────────
+// Shown instead of immediately creating a brand-new ad-hoc session when
+// "Start New Session" is confirmed and a `state: 'planned'` session already
+// exists for today (see handleConfirm above) — so a coach who meant to
+// start the session already on the calendar doesn't accidentally spin up a
+// second, independent one. "Yes" reuses the same `useStartPlannedSession`
+// activation path CalendarPage's StartOrReviewModal uses for its "Start
+// Now"; "No" proceeds with the original ad-hoc creation unchanged (PRD
+// 3.7's two-session pattern — both end up active at once).
+function PlannedSessionPrompt({ location, isPending, onYes, onNo, onClose }: {
+  location: string
+  isPending: boolean
+  onYes: () => void
+  onNo: () => void
+  onClose: () => void
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 90,
+        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', background: 'var(--panel)',
+          borderRadius: 'var(--r-lg) var(--r-lg) 0 0',
+          padding: '24px 18px 40px',
+        }}
+      >
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 8 }}>
+          Planned Session Today
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--dim)', margin: '0 0 20px' }}>
+          You have a planned session at {location} today — is this it?
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onYes}
+            disabled={isPending}
+            style={{
+              width: '100%', minHeight: 58,
+              background: 'linear-gradient(180deg, var(--orange-2), var(--orange))',
+              border: 'none', borderRadius: 'var(--r-md)', color: '#fff',
+              fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+              fontWeight: 800, fontSize: 15, textTransform: 'uppercase',
+              letterSpacing: '0.04em', cursor: isPending ? 'not-allowed' : 'pointer',
+              boxShadow: 'var(--accent-glow)', opacity: isPending ? 0.6 : 1,
+            }}
+          >
+            {isPending ? 'Starting…' : 'Yes, start it'}
+          </button>
+          <button
+            type="button"
+            onClick={onNo}
+            disabled={isPending}
+            style={{
+              width: '100%', minHeight: 54, borderRadius: 'var(--r-md)',
+              fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+              fontWeight: 800, fontSize: 14, letterSpacing: '.02em', textTransform: 'uppercase',
+              cursor: isPending ? 'not-allowed' : 'pointer', border: '1px solid var(--line-2)',
+              background: 'var(--panel-2)', color: 'var(--dim)', opacity: isPending ? 0.6 : 1,
+            }}
+          >
+            No, start a new one
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Dashboard root ─────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -202,6 +279,13 @@ export default function DashboardPage() {
   const { activeSessionId, activeLocation, elapsedSeconds, tick, setActiveSession } = useSessionStore()
   const [showSetup, setShowSetup] = useState(false)
   const openSession = useOpenSession()
+  const { data: todaysPlannedSession } = useTodaysPlannedSession()
+  const { start: startPlannedSession, isPending: startPending, playersLoading } = useStartPlannedSession()
+  // Task 4 (PRD §3.3): "Start New Session" location + players, held while the
+  // Yes/No disambiguation prompt below is open (only set when today already
+  // has a `state: 'planned'` session) — null means no prompt, and clearing
+  // it never navigates on its own (only Yes/No's own handlers do).
+  const [pendingAdHoc, setPendingAdHoc] = useState<{ location: string; players: string[] } | null>(null)
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -209,8 +293,7 @@ export default function DashboardPage() {
     return () => clearInterval(id)
   }, [activeSessionId, tick])
 
-  async function handleConfirm(location: string, players: string[]) {
-    setShowSetup(false)
+  async function createAdHocSession(location: string, players: string[]) {
     const today = new Date().toISOString().split('T')[0]
     try {
       const session = await openSession.mutateAsync({ location, date: today })
@@ -219,6 +302,21 @@ export default function DashboardPage() {
       // Offline fallback: use a local UUID so session still works
       setActiveSession(crypto.randomUUID(), location, players)
     }
+  }
+
+  async function handleConfirm(location: string, players: string[]) {
+    setShowSetup(false)
+    // Task 4 (PRD §3.3): today's `.date` is compared against the fetched
+    // row itself (rather than trusting the hook's internal "today" stayed
+    // in sync with this function's own UTC-ISO `today`) even though both
+    // are computed identically here — same defensive check as
+    // CalendarPage's handleCreateAndOpen.
+    const today = new Date().toISOString().split('T')[0]
+    if (todaysPlannedSession && todaysPlannedSession.date === today) {
+      setPendingAdHoc({ location, players })
+      return
+    }
+    await createAdHocSession(location, players)
   }
 
   if (!activeSessionId) {
@@ -233,6 +331,22 @@ export default function DashboardPage() {
           <NewSessionModal
             onClose={() => setShowSetup(false)}
             onConfirm={handleConfirm}
+          />
+        )}
+        {pendingAdHoc && todaysPlannedSession && (
+          <PlannedSessionPrompt
+            location={todaysPlannedSession.location}
+            isPending={startPending || playersLoading}
+            onYes={async () => {
+              await startPlannedSession(todaysPlannedSession)
+              setPendingAdHoc(null)
+            }}
+            onNo={async () => {
+              const { location, players } = pendingAdHoc
+              setPendingAdHoc(null)
+              await createAdHocSession(location, players)
+            }}
+            onClose={() => setPendingAdHoc(null)}
           />
         )}
       </>

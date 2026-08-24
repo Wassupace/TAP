@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 const { mockFrom } = vi.hoisted(() => ({ mockFrom: vi.fn() }))
 vi.mock('../lib/supabase', () => ({ supabase: { from: mockFrom } }))
 
-import { useCreatePlannedSession } from './useSessions'
+import { useCreatePlannedSession, useTodaysPlannedSession } from './useSessions'
 
 function buildInsertChain(result: { data?: unknown; error?: unknown }) {
   const chain = {
@@ -18,6 +18,21 @@ function buildInsertChain(result: { data?: unknown; error?: unknown }) {
   chain.insert.mockReturnValue(chain)
   chain.select.mockReturnValue(chain)
   chain.single.mockResolvedValue(result)
+  ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
+  return chain
+}
+
+function buildTodaysPlannedChain(result: { data?: unknown; error?: unknown }) {
+  const chain = {
+    select: vi.fn(),
+    eq: vi.fn(),
+    limit: vi.fn(),
+    maybeSingle: vi.fn(),
+  }
+  chain.select.mockReturnValue(chain)
+  chain.eq.mockReturnValue(chain)
+  chain.limit.mockReturnValue(chain)
+  chain.maybeSingle.mockResolvedValue(result)
   ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
   return chain
 }
@@ -115,5 +130,66 @@ describe('useCreatePlannedSession', () => {
         await getHook().mutateAsync({ location: 'Gym C', date: '2026-09-03' })
       })
     ).rejects.toThrow('offline')
+  })
+})
+
+// Mounts a minimal host component for a *query* hook (as opposed to
+// mountHook above, which is for useCreatePlannedSession's mutation) — same
+// harness style, but flushes a macrotask tick afterward so the query's
+// async queryFn has resolved and the captured result reflects it.
+function mountQueryHook(): () => ReturnType<typeof useTodaysPlannedSession> {
+  let captured: ReturnType<typeof useTodaysPlannedSession> | null = null
+  function Harness() {
+    captured = useTodaysPlannedSession()
+    return null
+  }
+  act(() => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>
+    )
+  })
+  return () => captured!
+}
+
+// A single macrotask tick is usually enough for the mocked chain to
+// resolve, but under load (full-suite runs) that one tick can fire before
+// the query observer's own state update reaches this render — poll the
+// hook's own isPending flag (not a cache-level proxy like isFetching,
+// which can flip before the component's render commits) so this can never
+// read a stale `data` value out of a race.
+async function waitForSettled(getHook: () => { isPending: boolean }) {
+  for (let i = 0; i < 20; i++) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    if (!getHook().isPending) return
+  }
+}
+
+describe('useTodaysPlannedSession', () => {
+  it('queries for a planned session on today\'s date and returns the match', async () => {
+    const todaySession = { id: 's9', location: 'Levallois Gym', date: '2099-01-01', state: 'planned' }
+    const chain = buildTodaysPlannedChain({ data: todaySession, error: null })
+    const getHook = mountQueryHook()
+
+    await waitForSettled(getHook)
+
+    expect(mockFrom).toHaveBeenCalledWith('sessions')
+    expect(chain.eq).toHaveBeenNthCalledWith(1, 'date', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/))
+    expect(chain.eq).toHaveBeenNthCalledWith(2, 'state', 'planned')
+    expect(chain.limit).toHaveBeenCalledWith(1)
+    expect(chain.maybeSingle).toHaveBeenCalledTimes(1)
+    expect(getHook().data).toEqual(todaySession)
+  })
+
+  it('returns null when no planned session exists for today', async () => {
+    buildTodaysPlannedChain({ data: null, error: null })
+    const getHook = mountQueryHook()
+
+    await waitForSettled(getHook)
+
+    expect(getHook().data).toBeNull()
   })
 })

@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackButton, Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
-import { useSessions, useOpenSession, useCreatePlannedSession, useActivateSession } from '../hooks/useSessions'
+import { useSessions, useOpenSession, useCreatePlannedSession, useTodaysPlannedSession } from '../hooks/useSessions'
+import { useStartPlannedSession } from '../hooks/useStartPlannedSession'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
-import { usePlayers } from '../hooks/usePlayers'
 import { useSessionStore } from '../stores/sessionStore'
 import type { Session } from '../types'
 import { isMissed, pillState, selectDayPills, pillLabel, type PillState } from '../utils/calendarPills'
@@ -39,8 +39,15 @@ export default function CalendarPage() {
   // the "Selected day sessions" list's "Open →" button below, so a planned
   // session never navigates straight into AttendancePage.tsx anymore.
   const [choiceSession, setChoiceSession] = useState<Session | null>(null)
+  // Task 4 (PRD §3.3): quick-start "Open Session" location, held here while
+  // the Yes/No disambiguation prompt below is open (only set when today
+  // already has a `state: 'planned'` session) — null means no prompt, and
+  // clearing it never navigates on its own (only Yes/No's own handlers do).
+  const [pendingAdHocLocation, setPendingAdHocLocation] = useState<string | null>(null)
   const { setActiveSession } = useSessionStore()
   const openSession = useOpenSession()
+  const { data: todaysPlannedSession } = useTodaysPlannedSession()
+  const { start: startPlannedSession, isPending: startPending, playersLoading } = useStartPlannedSession()
 
   const { data: sessions = [] } = useSessions(year, month)
 
@@ -77,13 +84,29 @@ export default function CalendarPage() {
 
   async function handleCreateAndOpen() {
     if (!newLocation.trim()) return
+    // Task 4 (PRD §3.3): the quick-start sheet only ever targets today or a
+    // past date (future dates use PlanSessionSheet instead — see
+    // isFutureDate above), so a planned-session conflict is only possible
+    // when the selected day actually is today. Comparing the fetched row's
+    // own `.date` (rather than trusting the hook's internal "today" is in
+    // sync with this component's local-date `todayISODateString`) keeps
+    // this correct even if the two ever drift.
+    if (todaysPlannedSession && todaysPlannedSession.date === selectedDate) {
+      setShowNewSession(false)
+      setPendingAdHocLocation(newLocation.trim())
+      return
+    }
+    await createAdHocSession(newLocation.trim())
+  }
+
+  async function createAdHocSession(location: string) {
     const date = selectedDate
     try {
-      const session = await openSession.mutateAsync({ location: newLocation.trim(), date })
+      const session = await openSession.mutateAsync({ location, date })
       setActiveSession(session.id, session.location, [])
       nav('/')
     } catch {
-      setActiveSession(crypto.randomUUID(), newLocation.trim(), [])
+      setActiveSession(crypto.randomUUID(), location, [])
       nav('/')
     }
   }
@@ -292,6 +315,23 @@ export default function CalendarPage() {
       {choiceSession && (
         <StartOrReviewModal session={choiceSession} onClose={() => setChoiceSession(null)} />
       )}
+
+      {pendingAdHocLocation && todaysPlannedSession && (
+        <PlannedSessionPrompt
+          location={todaysPlannedSession.location}
+          isPending={startPending || playersLoading}
+          onYes={async () => {
+            await startPlannedSession(todaysPlannedSession)
+            setPendingAdHocLocation(null)
+          }}
+          onNo={async () => {
+            const location = pendingAdHocLocation
+            setPendingAdHocLocation(null)
+            await createAdHocSession(location)
+          }}
+          onClose={() => setPendingAdHocLocation(null)}
+        />
+      )}
     </div>
   )
 }
@@ -383,15 +423,10 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
 // unchanged path. "Start Now" is the new fast path: it skips
 // AttendancePage.tsx's checklist entirely and activates the session with its
 // full saved expected roster as-is (PRD 3.3 — "pre-populated with the saved
-// location and attendee list"), mirroring AttendancePage.tsx's own `open()`
-// (same `useActivateSession` call, same `setActiveSession` + nav('/'), same
-// "still land on the local session even if the write fails" fallback) but
-// with every expected player treated as present instead of a checklist
-// selection. "Start Now" is disabled (and shows "Loading roster…") while
-// `usePlayers()` is still loading — the `useActivateSession` write itself
-// uses the persisted `expected_player_ids` directly and is unaffected, but
-// the local nickname display resolved from `allPlayers` would otherwise be
-// silently incomplete if tapped before that query resolves.
+// location and attendee list"). The activate-mutation + nickname-resolution
+// + setActiveSession + navigate sequence lives in `useStartPlannedSession`
+// (shared with Task 4's ad-hoc-on-a-planned-day "Yes" confirm below) rather
+// than duplicated here.
 interface StartOrReviewModalProps {
   session: Session
   onClose: () => void
@@ -399,27 +434,9 @@ interface StartOrReviewModalProps {
 
 function StartOrReviewModal({ session, onClose }: StartOrReviewModalProps) {
   const nav = useNavigate()
-  const { setActiveSession } = useSessionStore()
-  const activateSession = useActivateSession()
-  const { data: allPlayers = [], isLoading: playersLoading } = usePlayers()
+  const { start, isPending, playersLoading } = useStartPlannedSession()
 
   const expectedCount = session.expected_player_ids.length
-
-  async function handleStartNow() {
-    const expectedPlayers = allPlayers.filter((p) => session.expected_player_ids.includes(p.id))
-    try {
-      await activateSession.mutateAsync({
-        sessionId: session.id,
-        presentPlayerIds: session.expected_player_ids,
-      })
-    } catch {
-      // Same "keep going anyway" fallback as AttendancePage.tsx's open() —
-      // the local session store still flips active so the scribe isn't
-      // stuck offline.
-    }
-    setActiveSession(session.id, session.location, expectedPlayers.map((p) => p.nickname))
-    nav('/')
-  }
 
   function handleReviewDetails() {
     nav(`/calendar/attendance/${session.id}`)
@@ -437,11 +454,51 @@ function StartOrReviewModal({ session, onClose }: StartOrReviewModalProps) {
             : 'No expected players were saved for this session.'}
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Button variant="primary" onClick={handleStartNow} disabled={activateSession.isPending || playersLoading}>
-            {activateSession.isPending ? 'Starting…' : playersLoading ? 'Loading roster…' : 'Start Now'}
+          <Button variant="primary" onClick={() => start(session)} disabled={isPending || playersLoading}>
+            {isPending ? 'Starting…' : playersLoading ? 'Loading roster…' : 'Start Now'}
           </Button>
-          <Button variant="secondary" onClick={handleReviewDetails} disabled={activateSession.isPending}>
+          <Button variant="secondary" onClick={handleReviewDetails} disabled={isPending}>
             Review Details
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Ad-hoc-on-a-planned-day disambiguation (PRD §3.3, Task 4) ───────────────
+// Shown instead of immediately creating a brand-new ad-hoc session when the
+// quick-start sheet's "Open Session" is tapped and a `state: 'planned'`
+// session already exists for today (see handleCreateAndOpen above) — so a
+// coach who meant to start the session already on the calendar doesn't
+// accidentally spin up a second, independent one. "Yes" reuses the same
+// `useStartPlannedSession` activation path as StartOrReviewModal's "Start
+// Now" above; "No" proceeds with the original ad-hoc creation unchanged
+// (PRD 3.7's two-session pattern — both end up active at once).
+interface PlannedSessionPromptProps {
+  location: string
+  isPending: boolean
+  onYes: () => void
+  onNo: () => void
+  onClose: () => void
+}
+
+function PlannedSessionPrompt({ location, isPending, onYes, onNo, onClose }: PlannedSessionPromptProps) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}>
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
+          Planned Session Today
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--dim)', margin: '0 0 20px' }}>
+          You have a planned session at {location} today — is this it?
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Button variant="primary" onClick={onYes} disabled={isPending}>
+            {isPending ? 'Starting…' : 'Yes, start it'}
+          </Button>
+          <Button variant="secondary" onClick={onNo} disabled={isPending}>
+            No, start a new one
           </Button>
         </div>
       </div>

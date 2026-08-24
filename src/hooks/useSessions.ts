@@ -21,6 +21,32 @@ export function useSessions(year: number, month: number) {
   })
 }
 
+// Task 4 (PRD §3.3): looks up whether a `state: 'planned'` session already
+// exists for today, so both ad-hoc-creation flows (DashboardPage's
+// handleConfirm and CalendarPage's handleCreateAndOpen) can offer a
+// Yes/No disambiguation instead of silently creating a second, unrelated
+// session on top of one already on the calendar. "Today" is computed the
+// same way handleConfirm already does (UTC-based `toISOString()` slice)
+// rather than CalendarPage's local-date string, so this hook stays a single
+// source of truth independent of either call site.
+export function useTodaysPlannedSession() {
+  const today = new Date().toISOString().split('T')[0]
+  return useQuery({
+    queryKey: ['todays-planned-session', today],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('date', today)
+        .eq('state', 'planned')
+        .limit(1)
+        .maybeSingle()
+      if (error) throw error
+      return data as Session | null
+    },
+  })
+}
+
 export function useSession(id: string) {
   return useQuery({
     queryKey: ['session', id],
