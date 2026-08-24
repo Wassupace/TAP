@@ -27,11 +27,20 @@ function fireChange(fake: FakeMql, matches: boolean) {
   fake.listeners.forEach(cb => cb())
 }
 
+function themeColorMetaContent(): string | null {
+  return document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null
+}
+
 describe('initThemeSync', () => {
   beforeEach(() => {
     localStorage.clear()
     useThemeStore.setState({ preference: 'system' })
     document.documentElement.removeAttribute('data-theme')
+    document.head.querySelectorAll('meta[name="theme-color"]').forEach(el => el.remove())
+    const meta = document.createElement('meta')
+    meta.setAttribute('name', 'theme-color')
+    meta.setAttribute('content', '#0F0F14')
+    document.head.appendChild(meta)
   })
 
   afterEach(() => {
@@ -71,6 +80,23 @@ describe('initThemeSync', () => {
     const stop = initThemeSync()
     useThemeStore.getState().setPreference('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
+    stop()
+  })
+
+  it('syncs the theme-color meta tag to the resolved theme on init', () => {
+    mockMatchMedia(true)
+    const stop = initThemeSync()
+    expect(themeColorMetaContent()).toBe('#0F0F14')
+    stop()
+  })
+
+  it('updates the theme-color meta tag whenever the effective theme changes', () => {
+    mockMatchMedia(false)
+    const stop = initThemeSync()
+    expect(themeColorMetaContent()).toBe('#FFFFFF')
+
+    useThemeStore.getState().setPreference('dark')
+    expect(themeColorMetaContent()).toBe('#0F0F14')
     stop()
   })
 })

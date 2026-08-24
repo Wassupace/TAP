@@ -1,7 +1,23 @@
-import { useThemeStore, resolveEffectiveTheme, DARK_MEDIA_QUERY, type ThemePreference } from '../stores/themeStore'
+import { useThemeStore, resolveEffectiveTheme, DARK_MEDIA_QUERY, type ThemePreference, type EffectiveTheme } from '../stores/themeStore'
+
+/**
+ * Mirrors src/index.css's `--ink` token for each theme (`--ink: #FFFFFF` in
+ * `[data-theme="light"]`, `--ink: #0F0F14` in `[data-theme="dark"]`). The
+ * `<meta name="theme-color">` tag that colors the browser/PWA chrome has no
+ * access to CSS custom properties, so this is a second, deliberately
+ * hardcoded copy — keep it in sync if `--ink`'s values ever change.
+ */
+const THEME_COLOR: Record<EffectiveTheme, string> = {
+  light: '#FFFFFF',
+  dark: '#0F0F14',
+}
 
 function applyTheme(preference: ThemePreference) {
-  document.documentElement.dataset.theme = resolveEffectiveTheme(preference)
+  const effective = resolveEffectiveTheme(preference)
+  document.documentElement.dataset.theme = effective
+
+  const meta = document.querySelector('meta[name="theme-color"]')
+  meta?.setAttribute('content', THEME_COLOR[effective])
 }
 
 /**
