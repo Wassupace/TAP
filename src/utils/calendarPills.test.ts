@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isMissed, pillState, selectDayPills, fmtPillDuration, pillLabel } from './calendarPills'
+import { isMissed, pillState, selectDayPills, pillLabel } from './calendarPills'
 import type { Session } from '../types'
 
 function makeSession(overrides: Partial<Session> = {}): Session {
@@ -85,50 +85,33 @@ describe('selectDayPills', () => {
   })
 })
 
-describe('fmtPillDuration', () => {
-  it('rounds down to whole hours when >= 1h', () => {
-    expect(fmtPillDuration('2026-08-20T10:00:00Z', '2026-08-20T12:30:00Z')).toBe('2h')
-  })
-
-  it('shows minutes when under 1h', () => {
-    expect(fmtPillDuration('2026-08-20T10:00:00Z', '2026-08-20T10:45:00Z')).toBe('45m')
-  })
-
-  it('returns an em dash when either timestamp is missing', () => {
-    expect(fmtPillDuration(undefined, '2026-08-20T10:45:00Z')).toBe('—')
-    expect(fmtPillDuration('2026-08-20T10:00:00Z', undefined)).toBe('—')
-  })
-})
-
 describe('pillLabel', () => {
-  it('formats a completed session with truncated location and duration', () => {
-    const s = makeSession({
-      location: 'Levallois Gym',
-      state: 'completed',
-      date: '2026-08-20',
-      started_at: '2026-08-20T10:00:00Z',
-      ended_at: '2026-08-20T12:00:00Z',
-    })
-    expect(pillLabel(s, TODAY)).toBe('Levall· 2h')
+  // Review fix, round 1 (Finding 2): the grid pill's ~33px text area at
+  // font-size:8px/font-weight:700 only budgets ~6-7 characters total (see
+  // the derivation comment above LOCATION_CHARS in calendarPills.ts) — not
+  // enough for "<loc>· <suffix>" (up to 12 chars). The fix drops the
+  // separator and status suffix entirely; state is conveyed by pill
+  // color alone (unaffected by this change). pillLabel now takes a raw
+  // location string, not a Session, since state/date no longer factor into
+  // the label at all.
+  it('truncates a long location to 6 characters, no suffix', () => {
+    expect(pillLabel('Levallois Gym')).toBe('Levall')
   })
 
-  it('formats a planned session', () => {
-    const s = makeSession({ location: 'Levallois Gym', state: 'planned', date: '2026-08-25' })
-    expect(pillLabel(s, TODAY)).toBe('Levall· Plan')
+  it('leaves a short location untouched, no padding', () => {
+    expect(pillLabel('YMCA')).toBe('YMCA')
   })
 
-  it('formats an active session', () => {
-    const s = makeSession({ location: 'Levallois Gym', state: 'active' })
-    expect(pillLabel(s, TODAY)).toBe('Levall· Live')
+  it('truncates at exactly 6 characters for a 6-character location', () => {
+    expect(pillLabel('Neuill')).toBe('Neuill')
   })
 
-  it('formats a missed (past-dated planned) session', () => {
-    const s = makeSession({ location: 'Levallois Gym', state: 'planned', date: '2026-08-20' })
-    expect(pillLabel(s, TODAY)).toBe('Levall· Miss')
-  })
-
-  it('truncates a short location without padding', () => {
-    const s = makeSession({ location: 'YMCA', state: 'active' })
-    expect(pillLabel(s, TODAY)).toBe('YMCA· Live')
+  it('produces a label whose text fits the computed ~33px / ~6-7 char budget', () => {
+    // 6 chars * ~4.8px (Archivo bold @ 8px, ~0.6em average glyph width) =
+    // 28.8px, inside the ~33.14px content-area budget derived in
+    // calendarPills.ts. The label must never exceed LOCATION_CHARS (6).
+    const label = pillLabel('Wembley Arena')
+    expect(label.length).toBeLessThanOrEqual(6)
+    expect(label).toBe('Wemble')
   })
 })

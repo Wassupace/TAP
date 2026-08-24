@@ -49,28 +49,30 @@ export function selectDayPills(
 }
 
 /**
- * Compact duration for an 8px mini-pill: same started_at/ended_at diff as
- * SessionRecapPage's fmtDuration, but rounded to a single unit ("2h", "45m")
- * since there's no room for "2h 30min" at this scale.
+ * Grid-pill text budget (review fix, round 1 — see task-2-report.md
+ * "Fix round 1" section for the full derivation): on a 390px reference
+ * viewport, page `px-[18px]` (36px) + `grid-cols-7 gap-1` (6 * 4px = 24px)
+ * leaves a 330px grid / 7 = 47.14px `.cal-day` column. `* { box-sizing:
+ * border-box }` means `.cal-day`'s 1px border eats into that (45.14px
+ * content), then `.cal-day-pills`'s `padding: 0 2px` (41.14px) and
+ * `.cal-pill`'s `padding: 1px 4px` (33.14px) leave ~33px of actual text
+ * area at `font-size: 8px; font-weight: 700`. At Archivo bold's roughly
+ * 0.6em average glyph width (~4.8px at this size), that's a ~6-7 character
+ * budget for the ENTIRE label — not per segment. The previous
+ * `"<loc>· <suffix>"` format (e.g. "Levall· Miss", 12 chars / ~58px) was
+ * roughly double that budget on most pills, not just the longest one.
+ *
+ * Fix: the grid pill shows only the (already-fits) truncated location —
+ * no separator, no status word. State is still fully conveyed by the
+ * pill's background/text color (see `pillBg()` / `stateColor()` in
+ * CalendarPage.tsx, unchanged), and full state-name + duration detail
+ * remains visible in the "Selected day sessions" list rendered directly
+ * below the grid. 6 chars * ~4.8px = 28.8px, comfortably inside the
+ * 33.14px budget (~4px of margin for font-metric estimation error).
  */
-export function fmtPillDuration(startedAt: string | undefined | null, endedAt: string | undefined | null): string {
-  if (!startedAt || !endedAt) return '—'
-  const ms = new Date(endedAt).getTime() - new Date(startedAt).getTime()
-  const h = Math.floor(ms / 3_600_000)
-  const m = Math.floor((ms % 3_600_000) / 60_000)
-  return h > 0 ? `${h}h` : `${m}m`
-}
+const LOCATION_CHARS = 6
 
-const PILL_SUFFIX: Record<PillState, (s: Session) => string> = {
-  active: () => 'Live',
-  planned: () => 'Plan',
-  missed: () => 'Miss',
-  completed: (s) => fmtPillDuration(s.started_at, s.ended_at),
-}
-
-/** e.g. "Levall· 2h" for a completed session at "Levallois Gym". */
-export function pillLabel(session: Session, todayISODate: string): string {
-  const state = pillState(session, todayISODate)
-  const loc = session.location.slice(0, 6)
-  return `${loc}· ${PILL_SUFFIX[state](session)}`
+/** e.g. "Levall" for a session at "Levallois Gym" — see LOCATION_CHARS. */
+export function pillLabel(location: string): string {
+  return location.slice(0, LOCATION_CHARS)
 }

@@ -155,8 +155,28 @@ export default function CalendarPage() {
               {hasSess && (
                 <div className="cal-day-pills">
                   {pills.map((s) => (
-                    <span key={s.id} className="cal-pill" style={{ background: pillBg(pillState(s, todayISODateString)), color: stateColor(s) }}>
-                      {pillLabel(s, todayISODateString)}
+                    <span
+                      key={s.id}
+                      className="cal-pill"
+                      style={
+                        isSel
+                          // Contrast fix (review round 1): `.cal-day.selected` paints a
+                          // solid `var(--orange)` background, and the state-tinted
+                          // pill colors below (esp. planned's orange-2-on-orange-soft)
+                          // computed to ~1.3:1 against it — effectively invisible. A
+                          // plain CSS override can't win here because the colors are
+                          // set via inline `style`, which always beats a stylesheet
+                          // selector short of `!important`; picking the override in
+                          // JS keeps one source of truth and avoids `!important`.
+                          // rgba(0,0,0,.35) composited over var(--orange) (#E8500A)
+                          // = ~(151,52,7); white text against that computes to
+                          // ~7.48:1 (WCAG relative-luminance formula) — past AA (4.5:1)
+                          // and AAA (7:1) for this small bold text, see report.
+                          ? { background: 'var(--pill-selected-bg)', color: '#fff' }
+                          : { background: pillBg(pillState(s, todayISODateString)), color: stateColor(s) }
+                      }
+                    >
+                      {pillLabel(s.location)}
                     </span>
                   ))}
                   {overflow > 0 && <span className="cal-pill-overflow">+{overflow}</span>}

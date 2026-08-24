@@ -135,3 +135,173 @@ verified by manual trace-through (below) rather than a rendered-DOM test.
   default panel background). I did not add a `.cal-day.selected`-specific
   override for pill contrast since the brief didn't specify one; worth a
   visual check on a selected day that also has sessions.
+
+---
+
+## Fix round 1 (review findings)
+
+Two Important findings from review: (1) mini-pills are unreadable on the
+default-selected (today) cell's solid orange background, and (2) the
+`"<loc>· <suffix>"` label overflows its available text width on most pills,
+not just the longest one. Both confirmed real and fixed below.
+
+### Finding 1 — selected-cell pill contrast
+
+**Root cause confirmed.** `.cal-day.selected` sets a solid `background:
+var(--orange)` (`#E8500A`). Mini-pills set `background`/`color` via inline
+`style={{ background: pillBg(...), color: stateColor(...) }}`, and nothing
+overrode those colors when the parent cell was selected. For the planned
+state specifically (`color: var(--orange-2)` `#F66E2F` on `background:
+var(--orange-soft)` `rgba(232,80,10,.14)`), the reviewer's own contrast
+measurement (~1.3:1) is corroborated by inspection — the soft tint is ~14%
+opaque, so the cell reads as almost pure `--orange` underneath, and
+`--orange-2` is a close, low-contrast relative of `--orange` itself.
+
+**Fix.** In `src/pages/CalendarPage.tsx`, the pill's inline `style` is now
+computed conditionally: when the cell is the selected day (`isSel`), it uses
+`{ background: 'var(--pill-selected-bg)', color: '#fff' }` instead of the
+normal `pillBg(pillState(...))` / `stateColor(...)` pair. `--pill-selected-bg:
+rgba(0,0,0,.35)` is a new token added to both theme blocks in
+`src/index.css` (identical value in both, since `--orange` itself doesn't
+vary between light/dark).
+
+I deliberately did **not** add a `.cal-day.selected .cal-pill` CSS rule
+(the pattern the finding suggested, mirroring `.cal-plus`/`.cal-pill-overflow`)
+— those two work as plain CSS overrides only because they carry no inline
+`style`. `.cal-pill` does (background/color are inline), and an inline
+`style` attribute always wins over any stylesheet selector regardless of
+specificity, short of `!important`. Rather than reach for `!important`, the
+override lives in JS at the same call site that already computes the normal
+colors, which keeps one source of truth for "what color is this pill."
+Documented in a comment at both the JSX call site and next to the new CSS
+token.
+
+**Contrast arithmetic (WCAG relative-luminance formula), computed not
+eyeballed:**
+
+`rgba(0,0,0,.35)` composited over `--orange` `#E8500A` = `(232,80,10) ×
+0.65` (black overlay contributes 0 to each channel) ≈ `(151, 52, 7)`.
+
+Relative luminance `L = 0.2126·R + 0.7152·G + 0.0722·B`, where each channel
+is `c/255` linearized (`c ≤ 0.03928 → c/12.92`, else `((c+0.055)/1.055)^2.4`):
+
+- R = 150.8/255 = 0.5914 → linearized 0.3086
+- G = 52/255 = 0.2039 → linearized 0.0345
+- B = 6.5/255 = 0.0255 → linearized (≤ threshold) 0.0020
+
+`L = 0.2126×0.3086 + 0.7152×0.0345 + 0.0722×0.0020 = 0.0656 + 0.0247 +
+0.0001 = 0.0904`
+
+White text: `L = 1.0`.
+
+`Contrast = (1.0 + 0.05) / (0.0904 + 0.05) = 1.05 / 0.1404 ≈ 7.48:1`
+
+7.48:1 clears WCAG AA's 4.5:1 (normal text) with margin and clears AAA's
+7:1 too — a large improvement over the previous ~1.3:1 for the planned
+state (and this treatment is uniform across all four states now, not just
+planned, since all pill colors are overridden identically when selected).
+
+**Trade-off, stated explicitly:** on the selected cell, all pills render
+identically (white on dark scrim) — per-state color-coding is intentionally
+suppressed there in favor of guaranteed legibility, exactly as the finding's
+suggested fix implies ("not the state-tinted colors that clash with
+orange"). This doesn't lose information: selecting a cell is also what
+populates the "Selected day sessions" list directly below the grid, which
+still renders each session's state name in full color via the untouched
+`stateColor()` function.
+
+### Finding 2 — pill text truncation
+
+**Root cause confirmed via box-model arithmetic**, re-derived independently
+(390px reference viewport):
+
+- Page: `px-[18px]` × 2 = 36px → grid width = 390 − 36 = 354px
+- Grid: `grid-cols-7 gap-1` (gap-1 = 4px) → 6 gaps = 24px → 330px / 7 columns
+  = **47.14px** per `.cal-day` column
+- `* { box-sizing: border-box }` (confirmed in `src/index.css`), so
+  `.cal-day`'s `1px` border is inside that 47.14px → **45.14px** content
+- `.cal-day-pills` `padding: 0 2px` (border-box) → **41.14px**
+- `.cal-pill` `padding: 1px 4px` (border-box) → **33.14px** of actual text
+  area
+
+This matches the reviewer's "~33px" figure. At `font-size: 8px;
+font-weight: 700` in Archivo, average glyph width is roughly `0.6em ≈
+4.8px`, giving a **~6-7 character budget for the entire label** (33.14 /
+4.8 ≈ 6.9) — not per segment. The old label format `"<loc>· <suffix>"` (6
+truncated location chars + `"· "` + a 2-4 char suffix) ran 10-12 characters
+— roughly double the budget — on every pill except pure-suffix-less states,
+confirming the finding's "cuts most pills, not just the longest" claim.
+
+**Fix (approach b from the finding).** Dropped the middle-dot separator and
+status suffix entirely from `pillLabel()` in `src/utils/calendarPills.ts`.
+The function now takes a raw `location: string` (not a `Session` +
+`todayISODate`, since state/date no longer factor into the label at all)
+and returns `location.slice(0, 6)` — unchanged truncation length, since 6
+chars already fits the budget with margin once the suffix is gone. State is
+still fully conveyed by the pill's background/text color alone
+(`pillBg()`/`stateColor()`, untouched), and duration/state-name detail
+remains visible in the "Selected day sessions" list below the grid — this
+was the one place duration text existed outside the pill, so I checked: the
+list renders `s.state` (e.g. "planned"/"completed"), not the computed
+duration, meaning the grid pill's `"2h"`-style duration text is not
+literally duplicated elsewhere. I judged this an acceptable, deliberate
+trade-off per the finding's own explicit sanction of this approach and the
+severity of the fit failure it fixes, but flagging it here rather than
+asserting no information was lost.
+
+Removed `fmtPillDuration()` and the `PILL_SUFFIX` map from
+`calendarPills.ts` since nothing calls them anymore (dead code otherwise).
+
+**Budget verification, computed not asserted:**
+
+- `"Levall"` (6 chars) × ~4.8px/char = 28.8px, inside the 33.14px budget
+  (~4.3px / ~0.9 char of margin for font-metric estimation error)
+- Previous `"Levall· Miss"` (12 chars) × ~4.8px/char ≈ 57.6px — ~1.74× the
+  budget, consistent with the finding's claim that the suffix was reliably
+  clipped, not an edge case
+- Worst case: an all-wide-character 6-char location (e.g. "Wemble" from
+  "Wembley Arena") at a higher per-char estimate (~5.5px for cap-heavy
+  strings) = 33px, right at the edge — `overflow: hidden` +
+  `text-overflow: ellipsis` (already correctly wired, untouched) handles
+  this gracefully as a rare edge case rather than the near-universal
+  failure the suffix caused
+
+### Tests
+
+- `src/utils/calendarPills.test.ts`: removed the `fmtPillDuration` describe
+  block (function deleted) and rewrote the `pillLabel` block for the new
+  `(location: string) => string` signature — 4 tests: long-location
+  truncation to 6 chars, short-location passthrough, exact-6-char
+  passthrough, and an explicit budget-fit assertion (`label.length <= 6`) on
+  a multi-word location.
+- `npm test` — 13 files, **96 tests passing** (100 before this round; net
+  −4 from consolidating 5 old `pillLabel` tests + 3 `fmtPillDuration` tests
+  into 4 new `pillLabel` tests, all other 88 pre-existing tests untouched
+  and still passing).
+- `npm run build` — passes (tsc -b + vite build, no errors).
+- `npm run lint` — same 5 pre-existing errors in the same unrelated files
+  (`IOSInstallBanner.tsx`, `StatusDot.tsx`, `AttendancePage.tsx` ×2,
+  `CompetitiveSetupPage.tsx`) as before this round; zero lint issues in any
+  file this round touched (`calendarPills.ts`, `calendarPills.test.ts`,
+  `CalendarPage.tsx`, `index.css`).
+
+### Files changed this round
+
+- `src/utils/calendarPills.ts` — `pillLabel()` signature and body changed
+  (location-only, no suffix); `fmtPillDuration()` and `PILL_SUFFIX` removed.
+- `src/utils/calendarPills.test.ts` — tests updated for the new `pillLabel`
+  signature/behavior; `fmtPillDuration` tests removed.
+- `src/pages/CalendarPage.tsx` — pill call site now picks between the
+  normal per-state style and the new selected-cell override style; updated
+  `pillLabel()` call to pass `s.location` instead of `(s, todayISODateString)`.
+- `src/index.css` — new `--pill-selected-bg` token (both themes); comment
+  added above `.cal-pill` explaining why there's no CSS-only selected-state
+  rule for it.
+
+### Not touched
+
+Per the global constraints: `PlanSessionSheet`, the quick-start sheet, and
+the future-date `+`-indicator logic (`isFutureCell`) were not modified.
+`selectDayPills`, `isMissed`, `pillState`, and `PILL_PRIORITY` (Task 2's
+missed-session and pill-selection logic) are unchanged — only the label
+text and the selected-cell color path changed.
