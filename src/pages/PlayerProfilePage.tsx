@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BackButton } from '../components/ui/Button'
+import { BackButton, Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
+import { Card } from '../components/ui/Card'
 import { Icons } from '../components/ui/icons'
 import { ShotChart } from '../components/ui/ShotChart'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { useAttendanceStats } from '../hooks/useAttendanceStats'
 import { usePlayer, useUpdatePlayer } from '../hooks/usePlayers'
 import { usePlayerWL, usePlayerShooting } from '../hooks/usePlayerStats'
+import { useRecentPlayerActivity, type ActivityLogItem } from '../hooks/useRecentPlayerActivity'
 import { playerColor } from '../utils/playerColor'
 import { isPlayerEditValid, fractionToPercentInput, percentInputToFraction } from '../utils/playerEditForm'
 import { supabase } from '../lib/supabase'
@@ -109,15 +111,56 @@ function EditPlayerSheet({ player, onClose }: { player: Player; onClose: () => v
   )
 }
 
+// Recent Activity Log (PRD §4.3) — icon per activity type, same choices
+// already used for this activity_type/reference_id shape in
+// DashboardPage.tsx and SessionRecapPage.tsx's per-activity list.
+const ACTIVITY_ICON: Record<ActivityLogItem['activityType'], ReactNode> = {
+  match: Icons.ball,
+  drill: Icons.target,
+  competitiveGame: Icons.bolt,
+}
+
+function formatActivityDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+// Activity Card: type+name, location, date, and the result line. Non-
+// navigable on purpose — see PlayerProfilePage's activity-log block below
+// for why (no `onClick` is passed to `Card`, so it renders without the
+// "tappable" cursor/affordance Card only adds when a handler is present).
+function ActivityCard({ item }: { item: ActivityLogItem }) {
+  return (
+    <Card variant="accent" style={{ marginBottom: 8 }}>
+      <div className="flex gap-3">
+        <div
+          className="w-[42px] h-[42px] grid place-items-center flex-none"
+          style={{ borderRadius: 'var(--r-sm)', background: 'var(--orange-soft)', color: 'var(--orange-2)' }}
+        >
+          <span className="w-[21px] h-[21px]">{ACTIVITY_ICON[item.activityType]}</span>
+        </div>
+        <div className="flex-1">
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--chalk)', lineHeight: 1.35 }}>{item.label}</div>
+          <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2 }}>
+            {formatActivityDate(item.date)}{item.location ? ` · ${item.location}` : ''}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--orange-2)', marginTop: 4 }}>{item.resultLine}</div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export default function PlayerProfilePage() {
   const nav = useNavigate()
   const { id: playerId = '' } = useParams()
   const [chartMode, setChartMode] = useState<ChartMode | null>(null)
   const [showEdit, setShowEdit] = useState(false)
+  const [visibleActivityCount, setVisibleActivityCount] = useState(10)
 
   const { data: player } = usePlayer(playerId)
   const { data: attStats } = useAttendanceStats(playerId)
   const { data: wl } = usePlayerWL(playerId)
+  const { data: activity } = useRecentPlayerActivity(playerId)
   const { data: shooting } = usePlayerShooting(playerId)
 
   const { data: heatEntries = [] } = useQuery<HeatEntry[]>({
@@ -272,6 +315,31 @@ export default function PlayerProfilePage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Recent activity log (PRD §4.3) — merges matches/drills/competitive
+            games (see useRecentPlayerActivity.ts); no navigation on tap,
+            since none of the existing recap routes (/match/recap,
+            /drill/recap) can address a specific past activity by id — they
+            render from client-side session/match/drill store state, not a
+            fetch-by-id, and there's no competitive-game recap route at all
+            (see task-9-report.md for the full gap writeup). */}
+        {activity && activity.length > 0 && (
+          <>
+            <p className="text-[11px] tracking-[.2em] uppercase text-[var(--faint)] font-bold mb-1" style={{ marginTop: 20 }}>
+              Recent Activity
+            </p>
+            <div>
+              {activity.slice(0, visibleActivityCount).map(item => (
+                <ActivityCard key={`${item.activityType}-${item.id}`} item={item} />
+              ))}
+            </div>
+            {visibleActivityCount < activity.length && (
+              <Button variant="ghost" size="sm" onClick={() => setVisibleActivityCount(c => c + 10)}>
+                View More
+              </Button>
+            )}
+          </>
         )}
       </div>
 

@@ -6,6 +6,45 @@ export interface WLStats {
   losses: number
 }
 
+export interface GameSideRow {
+  team_a_score: number
+  team_b_score: number
+  team_a_player_ids: string[]
+  team_b_player_ids: string[]
+}
+
+/**
+ * Win/loss tally for one player, scoped to a single "side" (team A or team
+ * B) across a list of `games` rows. A game only counts toward this side if
+ * the player actually appears in that side's `team_*_player_ids` for that
+ * specific game — so this is safe to call against either a pre-filtered
+ * list (usePlayerWL's `.contains(...)`-scoped queries below, where the
+ * membership check is always true) or an unfiltered list spanning multiple
+ * games with different rosters per game (a single match's own `games`
+ * embed, used by `useRecentPlayerActivity`'s per-match W/L branch — see
+ * that file for the reuse). Ties count as a loss, matching this hook's
+ * original (pre-extraction) behavior — not "fixed" here, out of scope.
+ *
+ * Exported so `useRecentPlayerActivity.ts` can reuse this exact
+ * win-counting logic scoped to one match's games, instead of
+ * reimplementing it (Task 9 brief's explicit requirement).
+ */
+export function tallyBySide(games: GameSideRow[], playerId: string, side: 'a' | 'b'): WLStats {
+  let wins = 0
+  let losses = 0
+  for (const g of games) {
+    const onThisSide = side === 'a'
+      ? g.team_a_player_ids?.includes(playerId)
+      : g.team_b_player_ids?.includes(playerId)
+    if (!onThisSide) continue
+    const ownScore = side === 'a' ? g.team_a_score : g.team_b_score
+    const oppScore = side === 'a' ? g.team_b_score : g.team_a_score
+    if (ownScore > oppScore) wins++
+    else losses++
+  }
+  return { wins, losses }
+}
+
 export function usePlayerWL(playerId: string): { data: WLStats | null; isLoading: boolean } {
   const { data, isLoading } = useQuery({
     queryKey: ['player-wl', playerId],
@@ -14,28 +53,19 @@ export function usePlayerWL(playerId: string): { data: WLStats | null; isLoading
       const [{ data: gamesA, error: errA }, { data: gamesB, error: errB }] = await Promise.all([
         supabase
           .from('games')
-          .select('team_a_score, team_b_score')
+          .select('team_a_score, team_b_score, team_a_player_ids, team_b_player_ids')
           .contains('team_a_player_ids', [playerId]),
         supabase
           .from('games')
-          .select('team_a_score, team_b_score')
+          .select('team_a_score, team_b_score, team_a_player_ids, team_b_player_ids')
           .contains('team_b_player_ids', [playerId]),
       ])
       if (errA) throw errA
       if (errB) throw errB
 
-      let wins = 0
-      let losses = 0
-
-      for (const g of gamesA ?? []) {
-        if (g.team_a_score > g.team_b_score) wins++
-        else losses++
-      }
-      for (const g of gamesB ?? []) {
-        if (g.team_b_score > g.team_a_score) wins++
-        else losses++
-      }
-      return { wins, losses }
+      const a = tallyBySide((gamesA ?? []) as GameSideRow[], playerId, 'a')
+      const b = tallyBySide((gamesB ?? []) as GameSideRow[], playerId, 'b')
+      return { wins: a.wins + b.wins, losses: a.losses + b.losses }
     },
   })
   return { data: data ?? null, isLoading }
