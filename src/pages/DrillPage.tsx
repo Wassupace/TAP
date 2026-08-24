@@ -229,7 +229,7 @@ export default function DrillPage() {
             </div>
           )}
 
-          {/* Step 4 — Players (skip-able) */}
+          {/* Step 4 — Players (at least one required) */}
           {setupStep === 4 && (
             <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
@@ -238,7 +238,7 @@ export default function DrillPage() {
               <p style={{ fontSize: 13, color: 'var(--dim)', marginBottom: 16 }}>
                 {players.length > 0
                   ? 'Tap to change who is shooting this drill.'
-                  : 'Leave empty for a solo drill — pick players for a group drill.'}
+                  : 'Pick at least one player — in a solo drill, pick yourself.'}
               </p>
 
               {players.length > 0 && (

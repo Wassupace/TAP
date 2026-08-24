@@ -121,3 +121,63 @@ modification adding `graphify-out`, and untracked `docs/TAP_PRD_v5_8.md`,
 predate this task and were left out of this task's commit — only
 `src/pages/DrillPage.tsx`, `src/pages/DrillPage.test.tsx`, and this report
 were staged.
+
+## Fix round 1 — review finding
+
+**Finding:** Step 4's on-screen copy and a code comment contradicted the new
+guard. The comment `{/* Step 4 — Players (skip-able) */}` claimed the step
+was still skip-able (it no longer is), and the empty-roster copy read "Leave
+empty for a solo drill — pick players for a group drill." — literally
+instructing the user to do the one thing the new guard now blocks, with no
+feedback when they tried it (the "Next →" button has no `disabled` styling,
+per this task's own deliberate deviation noted above, so following that copy
+produces a silent no-op tap).
+
+**Fix applied** (`src/pages/DrillPage.tsx`, Step 4 block only, text-only):
+
+```diff
+-          {/* Step 4 — Players (skip-able) */}
++          {/* Step 4 — Players (at least one required) */}
+           {setupStep === 4 && (
+             ...
+               <p style={{ fontSize: 13, color: 'var(--dim)', marginBottom: 16 }}>
+                 {players.length > 0
+                   ? 'Tap to change who is shooting this drill.'
+-                  : 'Leave empty for a solo drill — pick players for a group drill.'}
++                  : 'Pick at least one player — in a solo drill, pick yourself.'}
+               </p>
+```
+
+Nothing else in the file was touched: the guard logic
+(`onClick={() => { if (players.length > 0) setSetupStep(5) }}`),
+`PlayerPickerModal`, `drillStore.ts`, and every other line of `DrillPage.tsx`
+are untouched, verified by `git diff`.
+
+### What was tested
+
+This is a pure copy/comment change with no effect on component behavior or
+test-visible DOM structure (the changed strings are not asserted on by any
+existing test — the Task 9 tests key off `"Select Players"` / `"Makes target
+per spot"`, not the empty-roster helper copy). Re-ran full verification
+anyway:
+
+```
+npm test        → 10 test files, 67 tests, all passed (unchanged from before this fix)
+npm run build   → tsc -b && vite build succeeded, no type errors
+npm run lint    → 5 errors / 1 warning, identical pre-existing baseline
+                   (IOSInstallBanner.tsx, StatusDot.tsx, AttendancePage.tsx x2,
+                   CompetitiveSetupPage.tsx) — none in DrillPage.tsx
+```
+
+### Files changed
+
+- `src/pages/DrillPage.tsx` — one comment line and one string literal changed,
+  nothing else.
+- `plans/tap-v5-8/task-9-report.md` — this addendum (appended, not
+  overwritten).
+
+### Concerns
+
+None. Scope was exactly the comment and one string as specified in the
+finding; the guard logic, tests, and every other file listed as out-of-scope
+were left untouched.
