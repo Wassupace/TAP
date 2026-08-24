@@ -351,6 +351,8 @@ export default function PlayerProfilePage() {
           onClose={() => setChartMode(null)}
           playerName={player.nickname}
           heatEntries={heatEntries}
+          ftMakes={shooting?.ftMakes ?? 0}
+          ftAttempts={shooting?.ftAttempts ?? 0}
         />
       )}
 

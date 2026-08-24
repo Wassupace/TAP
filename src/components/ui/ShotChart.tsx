@@ -150,9 +150,11 @@ interface ShotChartProps {
   onClose: () => void
   playerName?: string
   heatEntries?: HeatEntry[]    // if provided, enables L/R/ALL hand filtering
+  ftMakes?: number             // free throw makes (default 0)
+  ftAttempts?: number          // free throw attempts (default 0)
 }
 
-export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', heatEntries }: ShotChartProps) {
+export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', heatEntries, ftMakes = 0, ftAttempts = 0 }: ShotChartProps) {
   const [handMode, setHandMode] = useState<'all' | 'left' | 'right'>('all')
 
   // Build per-zone stat overrides when heatEntries are provided
@@ -187,7 +189,7 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', 
   }
 
   const ftOn = mode === 'ft'
-  const ftColor = ftOn ? zoneColor(41, 50, 'ft') : 'rgba(156,163,175,0.18)'
+  const ftColor = ftOn ? zoneColor(ftMakes, ftAttempts, 'ft') : 'rgba(156,163,175,0.18)'
 
   return (
     <div
@@ -279,8 +281,8 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', 
           <g transform={`translate(${FTC.x},${FTC.y})`}>
             <circle r={22} fill={ftColor} stroke="rgba(255,255,255,.5)" strokeWidth={1.5} />
             <rect x={-20} y={-12} width={40} height={24} rx={6} fill={ftOn ? 'rgba(255,255,255,.85)' : 'rgba(20,27,38,.6)'} />
-            <text x={0} y={-1} textAnchor="middle" fontFamily="Archivo" fontWeight={800} fontSize={10} fill={ftOn ? '#0c0c0c' : 'rgba(244,246,252,.45)'}>{ftOn ? '41/50' : 'FT'}</text>
-            <text x={0} y={9} textAnchor="middle" fontFamily="Anton" fontSize={10} fill={ftOn ? '#0c0c0c' : 'rgba(244,246,252,.4)'}>{ftOn ? '82%' : '—'}</text>
+            <text x={0} y={-1} textAnchor="middle" fontFamily="Archivo" fontWeight={800} fontSize={10} fill={ftOn ? '#0c0c0c' : 'rgba(244,246,252,.45)'}>{ftOn ? (ftAttempts > 0 ? `${ftMakes}/${ftAttempts}` : 'FT') : 'FT'}</text>
+            <text x={0} y={9} textAnchor="middle" fontFamily="Anton" fontSize={10} fill={ftOn ? '#0c0c0c' : 'rgba(244,246,252,.4)'}>{ftOn ? (ftAttempts > 0 ? `${Math.round((ftMakes / ftAttempts) * 100)}%` : '—') : '—'}</text>
           </g>
         </svg>
       </div>
