@@ -25,9 +25,14 @@ export function fractionToPercentInput(fraction: number): number {
 /**
  * Converts a 0-100 number-input value back into the stored 0-1 fraction on
  * save. Non-finite input (e.g. a cleared field) falls back to 0 rather than
- * saving `NaN`.
+ * saving `NaN`. The input is clamped to `[0, 100]` before dividing so the
+ * result is always a valid `[0, 1]` fraction — the `min`/`max` attributes on
+ * the `<input type="number">` are not natively enforced, so this is the only
+ * guard against an out-of-range value (e.g. `500` or `-20`) reaching
+ * Supabase.
  */
 export function percentInputToFraction(percent: number): number {
   if (!Number.isFinite(percent)) return 0
-  return percent / 100
+  const clamped = Math.min(100, Math.max(0, percent))
+  return clamped / 100
 }

@@ -58,6 +58,16 @@ describe('percentInputToFraction', () => {
     expect(percentInputToFraction(NaN)).toBe(0)
     expect(percentInputToFraction(Infinity)).toBe(0)
   })
+
+  it('clamps values above 100 down to a fraction of 1', () => {
+    expect(percentInputToFraction(500)).toBe(1)
+    expect(percentInputToFraction(101)).toBe(1)
+  })
+
+  it('clamps negative values up to a fraction of 0', () => {
+    expect(percentInputToFraction(-20)).toBe(0)
+    expect(percentInputToFraction(-1)).toBe(0)
+  })
 })
 
 describe('round-trip', () => {

@@ -116,3 +116,62 @@ in `IOSInstallBanner.tsx`, `StatusDot.tsx`, `AttendancePage.tsx`, and
   build on.
 - `npm run build`, `npm test` (run twice), `npm run lint` all clean for
   touched files; baseline lint errors elsewhere unchanged.
+
+## Fix Round 1
+
+### Finding
+`percentInputToFraction` in `src/utils/playerEditForm.ts` guarded against
+non-finite input (`NaN`/`Infinity` → `0`) but did not clamp the 0-100 input
+to a valid range before dividing by 100. The `<input type="number" min={0}
+max={100}>` attributes in `EditPlayerSheet` are decorative only (no native
+`<form>` validity check, and `canSave` only gates on Name/Nickname), so a
+user typing e.g. `500` or `-20` into a Target %  field was not blocked from
+saving — writing `target_ft_percent: 5.0` or `-0.2` straight to Supabase.
+Every downstream consumer (`ProgressBar`, the "Goal {pct}%" label in
+`PlayerProfilePage.tsx`, `src/utils/sheetsExport.ts`) assumes this column is
+strictly a `[0, 1]` fraction, so an out-of-range value would corrupt display
+(e.g. literally render "Goal 500%") and persist across reloads.
+
+### Fix
+**File:** `src/utils/playerEditForm.ts`
+
+Clamped the percent input to `[0, 100]` before dividing, in
+`percentInputToFraction`:
+
+```ts
+export function percentInputToFraction(percent: number): number {
+  if (!Number.isFinite(percent)) return 0
+  const clamped = Math.min(100, Math.max(0, percent))
+  return clamped / 100
+}
+```
+
+The existing non-finite → 0 guard is unchanged and still runs first. This is
+the single choke point every save already passes through (`EditPlayerSheet`
+calls this function to build the `mutateAsync` payload for all three target
+fields), so no out-of-range fraction can reach Supabase regardless of what's
+typed into the number inputs — no per-`onChange` interception needed.
+
+### Tests
+**File:** `src/utils/playerEditForm.test.ts`
+
+Added two cases to the existing `percentInputToFraction` describe block:
+- `'clamps values above 100 down to a fraction of 1'` — `500 → 1`, `101 → 1`
+- `'clamps negative values up to a fraction of 0'` — `-20 → 0`, `-1 → 0`
+
+All prior cases (exact percents, 0/100 boundaries, non-finite fallback, the
+round-trip check) are unchanged and still pass.
+
+### Build & Test Results
+- `npm run build` — clean, no TypeScript errors.
+- `npm test` (run twice): **18 test files, 140 tests passed** both runs
+  (138 prior + 2 new clamp cases), zero flakes.
+- `npm run lint` — same pre-existing baseline: 5 errors + 1 warning in
+  `IOSInstallBanner.tsx`, `StatusDot.tsx`, `AttendancePage.tsx`,
+  `CompetitiveSetupPage.tsx`. Zero issues in `playerEditForm.ts` or
+  `playerEditForm.test.ts`.
+
+### Scope
+Only `src/utils/playerEditForm.ts` and `src/utils/playerEditForm.test.ts`
+were touched. `PlayerProfilePage.tsx`, `icons.tsx`, and all other files
+listed as out-of-scope in the fix-round brief were not modified.
