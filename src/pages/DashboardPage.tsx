@@ -5,7 +5,7 @@ import { Icons } from '../components/ui/icons'
 import { Avatar } from '../components/ui/Avatar'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { StatusDot } from '../components/ui/StatusDot'
-import { useOpenSession, useEndSession, useTodaysPlannedSession } from '../hooks/useSessions'
+import { useOpenSession, useEndSession, useTodaysPlannedSession, useLocationHistory } from '../hooks/useSessions'
 import { useStartPlannedSession } from '../hooks/useStartPlannedSession'
 import { useActivityFeed } from '../hooks/useActivityFeed'
 import { useResolvePickedPlayers } from '../hooks/useResolvePickedPlayers'
@@ -51,6 +51,7 @@ function NewSessionModal({ onClose, onConfirm }: {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [playerPickerOpen, setPlayerPickerOpen] = useState(false)
   const { allPlayers, resolveIds } = useResolvePickedPlayers()
+  const { data: locationHistory = [] } = useLocationHistory()
 
   const selectedPlayers = allPlayers.filter(p => selectedIds.includes(p.id))
   const canStart = location.trim().length > 0
@@ -94,6 +95,8 @@ function NewSessionModal({ onClose, onConfirm }: {
               Gym / Location <span style={{ color: 'var(--orange)' }}>*</span>
             </p>
             <input
+              id="newSessionLocationInput"
+              list="newSessionLocationList"
               type="text"
               value={location}
               onChange={e => setLocation(e.target.value)}
@@ -107,6 +110,11 @@ function NewSessionModal({ onClose, onConfirm }: {
                 fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box',
               }}
             />
+            <datalist id="newSessionLocationList">
+              {locationHistory.map((loc) => (
+                <option key={loc} value={loc} />
+              ))}
+            </datalist>
           </label>
 
           {/* Players */}

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackButton, Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
-import { useSessions, useOpenSession, useCreatePlannedSession, useTodaysPlannedSession } from '../hooks/useSessions'
+import { useSessions, useOpenSession, useCreatePlannedSession, useTodaysPlannedSession, useLocationHistory } from '../hooks/useSessions'
 import { useStartPlannedSession } from '../hooks/useStartPlannedSession'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { useSessionStore } from '../stores/sessionStore'
@@ -50,6 +50,7 @@ export default function CalendarPage() {
   const { start: startPlannedSession, isPending: startPending, playersLoading } = useStartPlannedSession()
 
   const { data: sessions = [] } = useSessions(year, month)
+  const { data: locationHistory = [] } = useLocationHistory()
 
   const days = buildCalendarDays(year, month)
   const today = now.getDate()
@@ -302,7 +303,12 @@ export default function CalendarPage() {
                 <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
                   Gym / Location <span style={{ color: 'var(--orange)' }}>*</span>
                 </p>
-                <input autoFocus type="text" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="e.g. Levallois Gym" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${newLocation.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+                <input id="quickStartLocationInput" list="quickStartLocationList" autoFocus type="text" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="e.g. Levallois Gym" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${newLocation.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+                <datalist id="quickStartLocationList">
+                  {locationHistory.map((loc) => (
+                    <option key={loc} value={loc} />
+                  ))}
+                </datalist>
               </label>
               <Button variant="primary" onClick={handleCreateAndOpen} disabled={!newLocation.trim() || openSession.isPending}>
                 {openSession.isPending ? 'Opening…' : 'Open Session'}
@@ -353,6 +359,7 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
   const [expectedPlayerIds, setExpectedPlayerIds] = useState<string[]>([])
   const [showPlayerPicker, setShowPlayerPicker] = useState(false)
   const createPlannedSession = useCreatePlannedSession()
+  const { data: locationHistory = [] } = useLocationHistory()
 
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
@@ -379,7 +386,12 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
             <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
               Gym / Location <span style={{ color: 'var(--orange)' }}>*</span>
             </p>
-            <input autoFocus type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Levallois Gym" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${location.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+            <input id="planSessionLocationInput" list="planSessionLocationList" autoFocus type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Levallois Gym" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${location.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+            <datalist id="planSessionLocationList">
+              {locationHistory.map((loc) => (
+                <option key={loc} value={loc} />
+              ))}
+            </datalist>
           </label>
 
           <button

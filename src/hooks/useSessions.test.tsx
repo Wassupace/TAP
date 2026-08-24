@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 const { mockFrom } = vi.hoisted(() => ({ mockFrom: vi.fn() }))
 vi.mock('../lib/supabase', () => ({ supabase: { from: mockFrom } }))
 
-import { useCreatePlannedSession, useTodaysPlannedSession } from './useSessions'
+import { useCreatePlannedSession, useTodaysPlannedSession, useLocationHistory, dedupeLocationsByRecency } from './useSessions'
 
 function buildInsertChain(result: { data?: unknown; error?: unknown }) {
   const chain = {
@@ -191,5 +191,101 @@ describe('useTodaysPlannedSession', () => {
     await waitForSettled(getHook)
 
     expect(getHook().data).toBeNull()
+  })
+})
+
+describe('dedupeLocationsByRecency', () => {
+  it('dedupes locations while preserving most-recent-first order', () => {
+    const locations = ['Gym A', 'Gym B', 'Gym A', 'Gym C', 'Gym B']
+    const result = dedupeLocationsByRecency(locations)
+    expect(result).toEqual(['Gym A', 'Gym B', 'Gym C'])
+  })
+
+  it('filters out null, undefined, and empty strings', () => {
+    const locations = ['Gym A', null, 'Gym B', undefined, '', '  ', 'Gym C']
+    const result = dedupeLocationsByRecency(locations)
+    expect(result).toEqual(['Gym A', 'Gym B', 'Gym C'])
+  })
+
+  it('trims whitespace before deduping', () => {
+    const locations = ['Gym A', '  Gym A  ', 'Gym B']
+    const result = dedupeLocationsByRecency(locations)
+    expect(result).toEqual(['Gym A', 'Gym B'])
+  })
+
+  it('returns empty array for empty input', () => {
+    expect(dedupeLocationsByRecency([])).toEqual([])
+  })
+})
+
+function buildLocationHistoryChain(result: { data?: unknown; error?: unknown }) {
+  const chain = {
+    select: vi.fn(),
+    order: vi.fn(),
+    limit: vi.fn(),
+  }
+  chain.select.mockReturnValue(chain)
+  chain.order.mockReturnValue(chain)
+  chain.limit.mockResolvedValue(result)
+  ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
+  return chain
+}
+
+function mountLocationHistoryHook(): () => ReturnType<typeof useLocationHistory> {
+  let captured: ReturnType<typeof useLocationHistory> | null = null
+  function Harness() {
+    captured = useLocationHistory()
+    return null
+  }
+  act(() => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>
+    )
+  })
+  return () => captured!
+}
+
+describe('useLocationHistory', () => {
+  it('fetches up to 50 sessions, dedupes client-side, and returns up to 15 locations', async () => {
+    const locations = Array.from({ length: 50 }, (_, i) => ({
+      location: i % 3 === 0 ? 'Gym A' : i % 3 === 1 ? 'Gym B' : 'Gym C',
+    }))
+    const chain = buildLocationHistoryChain({ data: locations, error: null })
+    const getHook = mountLocationHistoryHook()
+
+    await waitForSettled(getHook)
+
+    expect(mockFrom).toHaveBeenCalledWith('sessions')
+    expect(chain.select).toHaveBeenCalledWith('location')
+    expect(chain.order).toHaveBeenCalledWith('date', { ascending: false })
+    expect(chain.limit).toHaveBeenCalledWith(50)
+    expect(getHook().data).toEqual(['Gym A', 'Gym B', 'Gym C'])
+  })
+
+  it('handles responses with nulls and empty strings', async () => {
+    const locations = [
+      { location: 'Gym A' },
+      { location: null },
+      { location: 'Gym B' },
+      { location: '' },
+      { location: 'Gym A' },
+    ]
+    buildLocationHistoryChain({ data: locations, error: null })
+    const getHook = mountLocationHistoryHook()
+
+    await waitForSettled(getHook)
+
+    expect(getHook().data).toEqual(['Gym A', 'Gym B'])
+  })
+
+  it('returns empty array when no locations are found', async () => {
+    buildLocationHistoryChain({ data: [], error: null })
+    const getHook = mountLocationHistoryHook()
+
+    await waitForSettled(getHook)
+
+    expect(getHook().data).toEqual([])
   })
 })

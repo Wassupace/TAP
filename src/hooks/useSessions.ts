@@ -199,3 +199,37 @@ export function useActivateSession() {
     },
   })
 }
+
+// Task 5 (PRD §3.2): dedupes locations client-side, preserving most-recent-first order
+export function dedupeLocationsByRecency(
+  locations: (string | null | undefined)[]
+): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const loc of locations) {
+    const trimmed = loc?.trim()
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed)
+      result.push(trimmed)
+    }
+  }
+  return result
+}
+
+export function useLocationHistory() {
+  return useQuery({
+    queryKey: ['location-history'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('location')
+        .order('date', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      const dedupedLocations = dedupeLocationsByRecency(
+        data.map((row) => (row as Record<string, unknown>).location as string | null | undefined)
+      )
+      return dedupedLocations.slice(0, 15)
+    },
+  })
+}
