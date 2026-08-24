@@ -36,7 +36,9 @@
   --red:       #EF4444;
   --red-soft:  rgba(239,68,68,.16);
   --green:     #10B981;
+  --green-soft: rgba(16,185,129,.16);
   --yellow:    #F59E0B;
+  --grey:      #6B7280;
   --grey-z:    rgba(107,114,128,.15);
 
   /* Sport Card extras */
@@ -73,7 +75,9 @@
   --red:       #EF4444;
   --red-soft:  rgba(239,68,68,.16);
   --green:     #10B981;
+  --green-soft: rgba(16,185,129,.16);
   --yellow:    #F59E0B;
+  --grey:      #9CA3AF;
   --grey-z:    rgba(156,163,175,.20);
 
   /* Sport Card extras */
@@ -168,19 +172,34 @@ body {
 
 /* ---- Calendar ---- */
 .cal-day {
-  aspect-ratio: 1; border-radius: var(--r-sm);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 60px; border-radius: var(--r-sm);
+  /* flex-start (not center) + top padding: with mini-pills now a real flex
+     child below the day number (Task 2, PRD §3.2), centering the whole
+     group would shift the day number up/down per-cell depending on pill
+     count. Anchoring to the top keeps day numbers aligned across a week
+     row regardless of how many sessions a given day has. */
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding-top: 6px;
   font-size: 13px; font-weight: 600; background: var(--panel);
   border: 1px solid transparent; position: relative; color: var(--dim); cursor: pointer;
 }
 .cal-day.today    { border-color: var(--orange); color: var(--chalk); }
 .cal-day.selected { background: var(--orange); color: #fff; }
 .cal-day.out      { opacity: .3; }
-.cal-dot {
-  width: 5px; height: 5px; border-radius: 50%; background: var(--orange);
-  position: absolute; bottom: 7px;
+.cal-day-pills {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  margin-top: 4px; width: 100%; padding: 0 2px; box-sizing: border-box;
 }
-.cal-day.selected .cal-dot { background: #fff; }
+.cal-pill {
+  display: block; width: 100%; max-width: 100%; box-sizing: border-box;
+  font-size: 8px; font-weight: 700; line-height: 1.5; border-radius: 4px;
+  padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-align: center;
+}
+.cal-pill-overflow {
+  font-size: 8px; font-weight: 800; line-height: 1; color: var(--faint);
+}
+.cal-day.selected .cal-pill-overflow { color: #fff; }
 .cal-plus {
   font-size: 11px; font-weight: 800; line-height: 1; color: var(--orange);
   position: absolute; bottom: 4px;

@@ -6,6 +6,7 @@ import { useSessions, useOpenSession, useCreatePlannedSession } from '../hooks/u
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { useSessionStore } from '../stores/sessionStore'
 import type { Session } from '../types'
+import { isMissed, pillState, selectDayPills, pillLabel, type PillState } from '../utils/calendarPills'
 
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
@@ -46,9 +47,13 @@ export default function CalendarPage() {
   // single source of truth rather than duplicating the format elsewhere.
   const todayISODateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-  const sessionDays = new Set(
-    sessions.map((s) => parseInt(s.date.split('-')[2], 10))
-  )
+  const sessionDays = new Map<number, Session[]>()
+  for (const s of sessions) {
+    const day = parseInt(s.date.split('-')[2], 10)
+    const existing = sessionDays.get(day)
+    if (existing) existing.push(s)
+    else sessionDays.set(day, [s])
+  }
 
   const selectedDate = `${year}-${String(month).padStart(2, '0')}-${String(selected).padStart(2, '0')}`
   const selectedSessions = sessions.filter((s) => s.date === selectedDate)
@@ -77,9 +82,23 @@ export default function CalendarPage() {
   }
 
   function stateColor(s: Session) {
+    // Missed (bug §12.3): a 'planned' session whose date has passed reads
+    // as neutral grey, not the orange "Planned" treatment — the DB row is
+    // untouched, this is presentation only.
+    if (isMissed(s, todayISODateString)) return 'var(--grey)'
     if (s.state === 'active') return 'var(--green)'
     if (s.state === 'completed') return 'var(--blue)'
     return 'var(--orange-2)'
+  }
+
+  // Soft background tint for a grid-cell mini-pill, paired with stateColor()'s
+  // solid text color — same "soft bg + solid text" pairing already used for
+  // the Selected Sessions list's icon swatch below.
+  function pillBg(state: PillState) {
+    if (state === 'active') return 'var(--green-soft)'
+    if (state === 'completed') return 'var(--blue-soft)'
+    if (state === 'missed') return 'var(--grey-z)'
+    return 'var(--orange-soft)'
   }
 
   return (
@@ -112,14 +131,16 @@ export default function CalendarPage() {
           <div key={i} className="text-center text-[10px] text-[var(--faint)] font-bold pb-1.5 tracking-[.06em]">{d}</div>
         ))}
         {days.map((day, i) => {
-          const hasSess = sessionDays.has(day.d) && !day.out
+          const daySessions = day.out ? [] : sessionDays.get(day.d) ?? []
+          const hasSess = daySessions.length > 0 && !day.out
           const isSel = selected === day.d && !day.out
           const isTdy = isCurrentMonth && day.d === today && !day.out
           const cellDate = `${year}-${String(month).padStart(2, '0')}-${String(day.d).padStart(2, '0')}`
-          // A future, session-less cell shows "+" instead of the session dot
-          // (mutually exclusive — see .cal-dot / .cal-plus in index.css) and
-          // opens the Plan Session sheet directly on tap.
+          // A future, session-less cell shows "+" instead of the day's mini-
+          // pills (mutually exclusive — see .cal-day-pills / .cal-plus in
+          // index.css) and opens the Plan Session sheet directly on tap.
           const isFutureCell = !day.out && !hasSess && cellDate > todayISODateString
+          const { pills, overflow } = hasSess ? selectDayPills(daySessions, todayISODateString) : { pills: [], overflow: 0 }
           return (
             <div
               key={i}
@@ -131,7 +152,16 @@ export default function CalendarPage() {
               className={`cal-day ${day.out ? 'out' : ''} ${isTdy && !isSel ? 'today' : ''} ${isSel ? 'selected' : ''}`}
             >
               {day.d}
-              {hasSess && <span className="cal-dot" />}
+              {hasSess && (
+                <div className="cal-day-pills">
+                  {pills.map((s) => (
+                    <span key={s.id} className="cal-pill" style={{ background: pillBg(pillState(s, todayISODateString)), color: stateColor(s) }}>
+                      {pillLabel(s, todayISODateString)}
+                    </span>
+                  ))}
+                  {overflow > 0 && <span className="cal-pill-overflow">+{overflow}</span>}
+                </div>
+              )}
               {isFutureCell && <span className="cal-plus">+</span>}
             </div>
           )
