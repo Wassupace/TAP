@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackButton, Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
-import { useSessions, useOpenSession, useCreatePlannedSession } from '../hooks/useSessions'
+import { useSessions, useOpenSession, useCreatePlannedSession, useActivateSession } from '../hooks/useSessions'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
+import { usePlayers } from '../hooks/usePlayers'
 import { useSessionStore } from '../stores/sessionStore'
 import type { Session } from '../types'
 import { isMissed, pillState, selectDayPills, pillLabel, type PillState } from '../utils/calendarPills'
@@ -33,6 +34,11 @@ export default function CalendarPage() {
   const [selected, setSelected] = useState(now.getDate())
   const [showNewSession, setShowNewSession] = useState(false)
   const [newLocation, setNewLocation] = useState('')
+  // Session a "Start Now / Review Details" choice modal (PRD §3.3) is
+  // currently open for — shared trigger point for both the grid pill and
+  // the "Selected day sessions" list's "Open →" button below, so a planned
+  // session never navigates straight into AttendancePage.tsx anymore.
+  const [choiceSession, setChoiceSession] = useState<Session | null>(null)
   const { setActiveSession } = useSessionStore()
   const openSession = useOpenSession()
 
@@ -159,6 +165,22 @@ export default function CalendarPage() {
                     <span
                       key={s.id}
                       className="cal-pill"
+                      onClick={
+                        s.state === 'planned'
+                          ? (e) => {
+                              // Task 3 (PRD §3.3): tapping a planned session's
+                              // pill opens the Start Now / Review Details
+                              // choice modal directly, same trigger as the
+                              // list's "Open →" button below — stop the event
+                              // from also bubbling to the cell's onClick
+                              // (which only reselects the day, already
+                              // redundant here).
+                              e.stopPropagation()
+                              setSelected(day.d)
+                              setChoiceSession(s)
+                            }
+                          : undefined
+                      }
                       style={
                         isSel
                           // Contrast fix (review round 1): `.cal-day.selected` paints a
@@ -208,7 +230,7 @@ export default function CalendarPage() {
               </div>
               {s.state === 'planned' && (
                 <button
-                  onClick={() => nav(`/calendar/attendance/${s.id}`)}
+                  onClick={() => setChoiceSession(s)}
                   style={{ fontSize: 12, fontWeight: 700, color: 'var(--orange-2)', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   Open →
@@ -265,6 +287,10 @@ export default function CalendarPage() {
             </div>
           </div>
         )
+      )}
+
+      {choiceSession && (
+        <StartOrReviewModal session={choiceSession} onClose={() => setChoiceSession(null)} />
       )}
     </div>
   )
@@ -347,6 +373,75 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
         onClose={() => setShowPlayerPicker(false)}
       />
     </>
+  )
+}
+
+// ── Start Now / Review Details modal (PRD §3.3) ─────────────────────────────
+// Interposed between tapping a planned session (grid pill or the "Selected
+// day sessions" list's "Open →" button) and where that tap used to go
+// straight to `/calendar/attendance/:id`. "Review Details" is that exact
+// unchanged path. "Start Now" is the new fast path: it skips
+// AttendancePage.tsx's checklist entirely and activates the session with its
+// full saved expected roster as-is (PRD 3.3 — "pre-populated with the saved
+// location and attendee list"), mirroring AttendancePage.tsx's own `open()`
+// (same `useActivateSession` call, same `setActiveSession` + nav('/'), same
+// "still land on the local session even if the write fails" fallback) but
+// with every expected player treated as present instead of a checklist
+// selection.
+interface StartOrReviewModalProps {
+  session: Session
+  onClose: () => void
+}
+
+function StartOrReviewModal({ session, onClose }: StartOrReviewModalProps) {
+  const nav = useNavigate()
+  const { setActiveSession } = useSessionStore()
+  const activateSession = useActivateSession()
+  const { data: allPlayers = [] } = usePlayers()
+
+  const expectedCount = session.expected_player_ids.length
+
+  async function handleStartNow() {
+    const expectedPlayers = allPlayers.filter((p) => session.expected_player_ids.includes(p.id))
+    try {
+      await activateSession.mutateAsync({
+        sessionId: session.id,
+        presentPlayerIds: session.expected_player_ids,
+      })
+    } catch {
+      // Same "keep going anyway" fallback as AttendancePage.tsx's open() —
+      // the local session store still flips active so the scribe isn't
+      // stuck offline.
+    }
+    setActiveSession(session.id, session.location, expectedPlayers.map((p) => p.nickname))
+    nav('/')
+  }
+
+  function handleReviewDetails() {
+    nav(`/calendar/attendance/${session.id}`)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}>
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
+          {session.location}
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--dim)', margin: '0 0 20px' }}>
+          {expectedCount > 0
+            ? `${expectedCount} expected player${expectedCount > 1 ? 's' : ''} saved for this session.`
+            : 'No expected players were saved for this session.'}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Button variant="primary" onClick={handleStartNow} disabled={activateSession.isPending}>
+            {activateSession.isPending ? 'Starting…' : 'Start Now'}
+          </Button>
+          <Button variant="secondary" onClick={handleReviewDetails} disabled={activateSession.isPending}>
+            Review Details
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
