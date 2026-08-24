@@ -142,3 +142,114 @@ all in files this task doesn't touch (`IOSInstallBanner.tsx` ×1,
 - `npm run build`, `npm test`, `npm run lint` all clean for touched files;
   `npm test` run far more than twice (40 full-suite runs) after finding and
   fixing a real dependent-query settle-timing flake in the test harness.
+
+---
+
+# Fix Round 1
+
+## Finding
+The `useIsFetching()`-based fix (above) narrows the settle-timing race but
+doesn't eliminate it. Reviewer traced `@tanstack/react-query` v5 internals:
+`notifyManager` schedules cache→React notifications via a real
+`setTimeout(0)` (not a microtask), so a render can still observe the global
+fetch counter (`useIsFetching()`) hit zero after one dependent stage has
+settled in the cache but before React has been notified to re-render *this*
+hook with the next stage's result. `useIsFetching()`'s value is real-commit
+gated, but it's still a **global** counter — a proxy for "is anything,
+anywhere, still fetching," not "has *this* hook's own state, specifically,
+been recomputed in a committed render." This is the same race class flagged
+in Task 2 (a bare `setTimeout(0)` tick) and fixed correctly in Task 4
+(polling the hook's own captured `isPending`, re-verified sound by the Task
+4 and Task 6 reviewers) — Task 7's `useIsFetching()` fix regressed to a
+proxy-based signal instead of the endorsed own-state pattern.
+
+## Root cause this hook posed for the Task-4 pattern
+`useTodaysPlannedSession` (Task 4) is a single bare `useQuery(...)` result,
+so its test could poll `getHook().isPending` directly — that flag already
+existed on the hook's return value. `useSessionHighlights` composes three
+dependent stages (`useActivityFeed` → conditionally-enabled `games` and/or
+`heat_entries` queries) and returned only the derived `{ highlight,
+toWorkOn }` — no pending flag of its own to poll. Read the hook fully before
+choosing a fix; confirmed it had no existing completion signal to reuse.
+
+## Fix
+**Option (a) from the brief** — a minimal, additive change to the hook
+itself, since the test cannot observe internal `useQuery` state it doesn't
+return and duplicating the hook's exact `queryKey`/`queryFn` pairs inside
+the test harness (to independently subscribe to the same cache entries)
+would be fragile and duplicate the hook's own query definitions.
+
+**`src/hooks/useSessionHighlights.ts`:**
+- Named the three inner queries (`activityFeed`, `gamesQuery`,
+  `heatEntriesQuery`) instead of destructuring only `data` from each.
+- Added `isPending: boolean` to the hook's return value, computed as:
+  ```ts
+  const isPending =
+    activityFeed.isPending ||
+    (matchIds.length > 0 && gamesQuery.isPending) ||
+    (drillIds.length > 0 && heatEntriesQuery.isPending)
+  ```
+  The `matchIds.length > 0` / `drillIds.length > 0` guards matter: a
+  `useQuery` with `enabled: false` sits at `isPending: true` forever in v5
+  (status stays `'pending'`, fetchStatus `'idle'`), so a stage this session
+  never triggered (e.g. no `drill` activity logged) must not hold the
+  aggregate open.
+- `highlight`, `toWorkOn`, and the existing return shape are unchanged —
+  purely additive. `SessionRecapPage.tsx` destructures only `{ highlight,
+  toWorkOn }` and is untouched; the extra field is invisible to it.
+
+**`src/hooks/useSessionHighlights.test.tsx`:**
+- Removed the `useIsFetching` import and the `{ result, fetching }`
+  wrapper. `mountHook` now captures the hook's return value directly
+  (matching `useSessions.test.tsx`'s `mountQueryHook` pattern).
+- `waitForSettled` now polls `!getHook().isPending` — the hook's own field,
+  read from the same render that produced `highlight`/`toWorkOn` — instead
+  of a global counter.
+- Updated all `getHook().result.highlight` / `.result.toWorkOn` call sites
+  to `getHook().highlight` / `.toWorkOn` (no other test logic changed).
+
+## Why this is structurally sound, not just "passed N times"
+`isPending` here is computed inside the hook's own render body from the
+*same* `gamesQuery`/`heatEntriesQuery`/`activityFeed` objects that back the
+`games`/`heatEntries`/`activities` values feeding the `highlight`/`toWorkOn`
+`useMemo`s — all in one function call, one render pass, one commit. There
+is no separate global subscription in the path: `getHook().isPending` and
+`getHook().highlight` are read off the exact same captured object literal
+from the exact same call to `useSessionHighlights()`. There is no tick,
+`setTimeout`, or cross-hook proxy between "isPending flipped false" and
+"highlight/toWorkOn reflect the settled data" — they are two fields of one
+return value produced by one render. This closes the race class
+structurally (by construction, not by narrowing the window), the same way
+Task 4's fix did — it just required exposing the hook's own composite
+pending state first, since (unlike Task 4) this hook had none to begin
+with.
+
+## Verification
+- `npm run build` — clean, no TypeScript errors.
+- `npm run lint` — same pre-existing baseline (5 errors + 1 warning in
+  `IOSInstallBanner.tsx`/`StatusDot.tsx`/`AttendancePage.tsx`/
+  `CompetitiveSetupPage.tsx`); nothing new.
+- `npm test` (`vitest run`), full suite: **17 test files, 126 tests** —
+  15 consecutive sequential runs, all green, plus 5 additional runs fired
+  concurrently against each other (5 `vitest run` processes at once, to
+  reproduce the CPU-contention conditions under which the original flake
+  was reported) — also all green. 20 clean full-suite runs total. As noted
+  in the task brief, a clean run count does not by itself prove the race is
+  gone (the *old*, theoretically-real bug never reproduced empirically
+  either, in 40 + 15 prior runs) — the structural argument above, not the
+  run count, is the actual basis for this fix.
+
+## Files Changed (this round)
+- `src/hooks/useSessionHighlights.ts` — added `isPending` (additive, no
+  existing field changed)
+- `src/hooks/useSessionHighlights.test.tsx` — settle-polling now reads the
+  hook's own `isPending` instead of `useIsFetching()`
+
+## Constraints Met
+- No `SessionRecapPage.tsx`, `MatchRecapPage.tsx`, or Task 1–6 file touched.
+- No new npm dependencies.
+- Hook's existing `{ highlight, toWorkOn }` shape and its
+  `SessionRecapPage.tsx` consumer unchanged; `isPending` is a non-breaking
+  addition.
+- `npm run build`, `npm test` (20 full-suite runs), `npm run lint` all
+  clean.

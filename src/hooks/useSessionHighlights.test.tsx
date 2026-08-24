@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type MockedFunction } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { QueryClient, QueryClientProvider, useIsFetching } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 // Makes React flush passive effects synchronously inside `act()` instead of
 // deferring them load-dependently (the standard fix for a bare
@@ -79,26 +79,32 @@ afterEach(() => {
   container.remove()
 })
 
-// Captures both this hook's result and a live fetch count from *inside* the
-// rendered tree (via `useIsFetching`), not read imperatively off the
-// `QueryClient` after the fact. `QueryClient.isFetching()` can read 0 in the
-// gap between an internal cache update settling and React actually
-// committing the corresponding re-render — exactly the gap that made this
-// test flaky under full-suite load (`highlight`/`toWorkOn` still `null` even
-// though the mock's `.in(...)` had already been asserted as called).
-// `useIsFetching()` is itself a subscription, so by construction its value
-// can only change as part of an actual commit — the same guarantee
-// `useSessions.test.tsx`'s `waitForSettled` gets from polling a hook's own
-// `isPending`, applied here since this hook has no pending flag of its own
-// to expose.
-type Captured = { result: ReturnType<typeof useSessionHighlights>; fetching: number }
-
-function mountHook(sessionId: string): () => Captured {
-  let captured: Captured | null = null
+// Captures this hook's own return value from *inside* the rendered tree.
+//
+// The previous version of this helper polled `useIsFetching()` — a global
+// fetch counter subscription — on the theory that any subscription-backed
+// value can only change as part of an actual React commit. That's true of
+// the counter itself, but the counter is still a *proxy*: `notifyManager`
+// (react-query v5) schedules cache→React notifications via a real
+// `setTimeout(0)`, not a microtask, so a render can observe the global
+// counter hit zero after one dependent stage's cache entry has settled but
+// before React has been notified to re-render *this* hook with the next
+// stage's result. A global counter reaching zero says nothing about
+// whether *this* hook's own `games`/`heatEntries`/`highlight`/`toWorkOn`
+// have been recomputed in a committed render yet.
+//
+// The hook itself now exposes `isPending` (see useSessionHighlights.ts),
+// combining each dependent stage's *own* `useQuery` `isPending` — no global
+// proxy involved. Polling that field, captured straight off the hook's
+// return value in this render, gives the same guarantee
+// useSessions.test.tsx's `waitForSettled` gets from a bare `useQuery`'s
+// `isPending`: whatever this poll reads is always from the same render pass
+// that produced the `highlight`/`toWorkOn` values under test, because both
+// come out of the same call to `useSessionHighlights()` on the same commit.
+function mountHook(sessionId: string): () => ReturnType<typeof useSessionHighlights> {
+  let captured: ReturnType<typeof useSessionHighlights> | null = null
   function Harness() {
-    const result = useSessionHighlights(sessionId)
-    const fetching = useIsFetching()
-    captured = { result, fetching }
+    captured = useSessionHighlights(sessionId)
     return null
   }
   act(() => {
@@ -115,14 +121,14 @@ function mountHook(sessionId: string): () => Captured {
 // single macrotask tick is usually enough, but under load a query's own
 // state update can land after that one tick fires — and this hook chains
 // two stages (the activity feed resolving before `games`/`heat_entries`
-// even become enabled), so this polls the captured `fetching` count (see
+// even become enabled), so this polls the hook's own `isPending` (see
 // above) across up to 20 ticks rather than assuming one tick suffices.
-async function waitForSettled(getCaptured: () => Captured) {
+async function waitForSettled(getHook: () => { isPending: boolean }) {
   for (let i = 0; i < 20; i++) {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    if (getCaptured().fetching === 0) return
+    if (!getHook().isPending) return
   }
 }
 
@@ -148,12 +154,12 @@ describe('useSessionHighlights', () => {
     await waitForSettled(getHook)
 
     expect(gamesChain!.in).toHaveBeenCalledWith('match_id', ['match-1'])
-    expect(getHook().result.highlight).toEqual({
+    expect(getHook().highlight).toEqual({
       icon: 'flame',
       label: 'Highlight',
       value: 'Closest game: 11-10, lasted 19 min',
     })
-    expect(getHook().result.toWorkOn).toBeNull()
+    expect(getHook().toWorkOn).toBeNull()
   })
 
   it('picks the lowest-% drill spot with real attempts, never a spot with zero attempts', async () => {
@@ -181,8 +187,8 @@ describe('useSessionHighlights', () => {
     await waitForSettled(getHook)
 
     expect(heatChain!.in).toHaveBeenCalledWith('drill_id', ['drill-1'])
-    expect(getHook().result.highlight).toBeNull()
-    expect(getHook().result.toWorkOn).toEqual({
+    expect(getHook().highlight).toBeNull()
+    expect(getHook().toWorkOn).toEqual({
       icon: 'bolt',
       label: 'To work on',
       value: 'L 0°: 20%',
@@ -202,8 +208,8 @@ describe('useSessionHighlights', () => {
 
     await waitForSettled(getHook)
 
-    expect(getHook().result.highlight).toBeNull()
-    expect(getHook().result.toWorkOn).toBeNull()
+    expect(getHook().highlight).toBeNull()
+    expect(getHook().toWorkOn).toBeNull()
     expect(mockFrom).not.toHaveBeenCalledWith('games')
     expect(mockFrom).not.toHaveBeenCalledWith('heat_entries')
   })
@@ -214,7 +220,7 @@ describe('useSessionHighlights', () => {
 
     await waitForSettled(getHook)
 
-    expect(getHook().result.highlight).toBeNull()
-    expect(getHook().result.toWorkOn).toBeNull()
+    expect(getHook().highlight).toBeNull()
+    expect(getHook().toWorkOn).toBeNull()
   })
 })

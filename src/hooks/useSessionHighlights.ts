@@ -28,8 +28,17 @@ import { SPOT_LABELS, type Game, type HeatEntry, type RecapCallout, type ShotSpo
 export function useSessionHighlights(sessionId: string): {
   highlight: RecapCallout | null
   toWorkOn: RecapCallout | null
+  // Settled once every stage this hook actually depends on has reached a
+  // terminal (non-pending) state — read directly off each inner query's own
+  // reactive `isPending`, the same guarantee a bare `useQuery()` result
+  // gives a caller, just combined across this hook's dependent stages. This
+  // exists so tests can poll the hook's own committed state instead of a
+  // cache-level proxy (see useSessionHighlights.test.tsx for why that
+  // matters). Not consumed by SessionRecapPage today — additive only.
+  isPending: boolean
 } {
-  const { data: activities = [] } = useActivityFeed(sessionId || null)
+  const activityFeed = useActivityFeed(sessionId || null)
+  const { data: activities = [] } = activityFeed
 
   const matchIds = useMemo(
     () => activities.filter(a => a.activity_type === 'match').map(a => a.reference_id),
@@ -40,7 +49,7 @@ export function useSessionHighlights(sessionId: string): {
     [activities]
   )
 
-  const { data: games = [] } = useQuery({
+  const gamesQuery = useQuery({
     queryKey: ['session-highlight-games', sessionId, matchIds],
     enabled: matchIds.length > 0,
     queryFn: async () => {
@@ -52,8 +61,9 @@ export function useSessionHighlights(sessionId: string): {
       return data as Game[]
     },
   })
+  const { data: games = [] } = gamesQuery
 
-  const { data: heatEntries = [] } = useQuery({
+  const heatEntriesQuery = useQuery({
     queryKey: ['session-toworkon-heat-entries', sessionId, drillIds],
     enabled: drillIds.length > 0,
     queryFn: async () => {
@@ -65,6 +75,7 @@ export function useSessionHighlights(sessionId: string): {
       return data as HeatEntry[]
     },
   })
+  const { data: heatEntries = [] } = heatEntriesQuery
 
   const highlight = useMemo<RecapCallout | null>(() => {
     if (matchIds.length === 0) return null
@@ -114,5 +125,16 @@ export function useSessionHighlights(sessionId: string): {
     }
   }, [heatEntries, drillIds])
 
-  return { highlight, toWorkOn }
+  // `matchIds`/`drillIds` gate which stages actually matter: a query that's
+  // disabled (`enabled: false`) sits at `isPending: true` forever in
+  // react-query v5 (status stays 'pending', fetchStatus 'idle'), so a stage
+  // this session never triggered must not hold `isPending` open — only
+  // stages this hook actually enabled are required to reach a terminal
+  // state.
+  const isPending =
+    activityFeed.isPending ||
+    (matchIds.length > 0 && gamesQuery.isPending) ||
+    (drillIds.length > 0 && heatEntriesQuery.isPending)
+
+  return { highlight, toWorkOn, isPending }
 }
