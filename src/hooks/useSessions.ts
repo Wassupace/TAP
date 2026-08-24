@@ -86,6 +86,39 @@ export function useOpenSession() {
   })
 }
 
+export function useCreatePlannedSession() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      location,
+      date,
+      expectedPlayerIds = [],
+    }: {
+      location: string
+      date: string
+      expectedPlayerIds?: string[]
+    }) => {
+      const { data, error } = await supabase
+        .from('sessions')
+        .insert({
+          location,
+          date,
+          state: 'planned',
+          is_recurring: false,
+          expected_player_ids: expectedPlayerIds,
+        })
+        .select()
+        .single()
+      if (error) throw error
+      return data as Session
+    },
+    onSuccess: (s) => {
+      qc.invalidateQueries({ queryKey: ['sessions'] })
+      qc.setQueryData(['session', s.id], s)
+    },
+  })
+}
+
 export function useEndSession() {
   const qc = useQueryClient()
   return useMutation({

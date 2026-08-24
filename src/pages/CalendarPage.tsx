@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackButton, Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
-import { useSessions, useOpenSession } from '../hooks/useSessions'
+import { useSessions, useOpenSession, useCreatePlannedSession } from '../hooks/useSessions'
+import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { useSessionStore } from '../stores/sessionStore'
 import type { Session } from '../types'
 
@@ -39,12 +40,19 @@ export default function CalendarPage() {
   const today = now.getDate()
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1
 
+  // Future-date detection (Phase 2 §3.2): a day strictly after today's ISO
+  // date gets the "plan for later" path instead of "start now". Later tasks
+  // in this phase read/extend this same string comparison — keep it as the
+  // single source of truth rather than duplicating the format elsewhere.
+  const todayISODateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
   const sessionDays = new Set(
     sessions.map((s) => parseInt(s.date.split('-')[2], 10))
   )
 
   const selectedDate = `${year}-${String(month).padStart(2, '0')}-${String(selected).padStart(2, '0')}`
   const selectedSessions = sessions.filter((s) => s.date === selectedDate)
+  const isFutureDate = selectedDate > todayISODateString
 
   function prevMonth() {
     if (month === 1) { setYear(y => y - 1); setMonth(12) }
@@ -107,14 +115,24 @@ export default function CalendarPage() {
           const hasSess = sessionDays.has(day.d) && !day.out
           const isSel = selected === day.d && !day.out
           const isTdy = isCurrentMonth && day.d === today && !day.out
+          const cellDate = `${year}-${String(month).padStart(2, '0')}-${String(day.d).padStart(2, '0')}`
+          // A future, session-less cell shows "+" instead of the session dot
+          // (mutually exclusive — see .cal-dot / .cal-plus in index.css) and
+          // opens the Plan Session sheet directly on tap.
+          const isFutureCell = !day.out && !hasSess && cellDate > todayISODateString
           return (
             <div
               key={i}
-              onClick={() => !day.out && setSelected(day.d)}
+              onClick={() => {
+                if (day.out) return
+                setSelected(day.d)
+                if (isFutureCell) setShowNewSession(true)
+              }}
               className={`cal-day ${day.out ? 'out' : ''} ${isTdy && !isSel ? 'today' : ''} ${isSel ? 'selected' : ''}`}
             >
               {day.d}
               {hasSess && <span className="cal-dot" />}
+              {isFutureCell && <span className="cal-plus">+</span>}
             </div>
           )
         })}
@@ -155,26 +173,112 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Quick-start session sheet */}
+      {/* Quick-start session sheet (today/past) vs. Plan Session sheet (future) —
+          which one opens is decided purely by isFutureDate for the currently
+          selected day; today/past always take the unchanged quick-start path. */}
       {showNewSession && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }} onClick={() => setShowNewSession(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}>
-            <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 20 }}>
-              New Session · {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+        isFutureDate ? (
+          <PlanSessionSheet date={selectedDate} onClose={() => setShowNewSession(false)} />
+        ) : (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }} onClick={() => setShowNewSession(false)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}>
+              <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 20 }}>
+                New Session · {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </div>
+              <label style={{ display: 'block', marginBottom: 24 }}>
+                <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+                  Gym / Location <span style={{ color: 'var(--orange)' }}>*</span>
+                </p>
+                <input autoFocus type="text" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="e.g. Levallois Gym" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${newLocation.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+              </label>
+              <Button variant="primary" onClick={handleCreateAndOpen} disabled={!newLocation.trim() || openSession.isPending}>
+                {openSession.isPending ? 'Opening…' : 'Open Session'}
+              </Button>
             </div>
-            <label style={{ display: 'block', marginBottom: 24 }}>
-              <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
-                Gym / Location <span style={{ color: 'var(--orange)' }}>*</span>
-              </p>
-              <input autoFocus type="text" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="e.g. Levallois Gym" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${newLocation.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
-            </label>
-            <Button variant="primary" onClick={handleCreateAndOpen} disabled={!newLocation.trim() || openSession.isPending}>
-              {openSession.isPending ? 'Opening…' : 'Open Session'}
-            </Button>
           </div>
-        </div>
+        )
       )}
     </div>
+  )
+}
+
+// ── Plan Session sheet (PRD §3.2) ───────────────────────────────────────────
+// Distinct from the quick-start sheet above: creates a `state: 'planned'`
+// session (no started_at, no navigation on success) instead of an active one.
+// Self-contained (owns its own location/player-selection state) so it can be
+// mounted/unmounted per open without leaking state back into CalendarPage.
+// Later Phase 2 tasks extend this component with a recurrence toggle and a
+// location datalist — keep additions inside this block.
+interface PlanSessionSheetProps {
+  date: string
+  onClose: () => void
+}
+
+function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
+  const [location, setLocation] = useState('')
+  const [expectedPlayerIds, setExpectedPlayerIds] = useState<string[]>([])
+  const [showPlayerPicker, setShowPlayerPicker] = useState(false)
+  const createPlannedSession = useCreatePlannedSession()
+
+  const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
+  async function handlePlanSession() {
+    if (!location.trim()) return
+    try {
+      await createPlannedSession.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
+      onClose()
+    } catch {
+      // Leave the sheet open on failure so the coach can retry — unlike the
+      // quick-start path, there's no "keep going anyway" fallback here since
+      // we aren't navigating away.
+    }
+  }
+
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }} onClick={onClose}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}>
+          <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 20 }}>
+            Plan Session · {dateLabel}
+          </div>
+          <label style={{ display: 'block', marginBottom: 20 }}>
+            <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>
+              Gym / Location <span style={{ color: 'var(--orange)' }}>*</span>
+            </p>
+            <input autoFocus type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Levallois Gym" style={{ width: '100%', background: 'var(--panel-2)', border: `1px solid ${location.trim() ? 'var(--orange)' : 'var(--line-2)'}`, borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none', fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' }} />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setShowPlayerPicker(true)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '12px 14px', borderRadius: 'var(--r-md)', marginBottom: 24,
+              background: 'var(--panel-2)', border: '1px dashed var(--line-2)',
+              color: 'var(--orange)', fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+              fontWeight: 800, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ width: 16, height: 16 }}>{Icons.plus}</span>
+            {expectedPlayerIds.length > 0
+              ? `${expectedPlayerIds.length} player${expectedPlayerIds.length > 1 ? 's' : ''} added`
+              : 'Add players'}
+          </button>
+
+          <Button variant="primary" onClick={handlePlanSession} disabled={!location.trim() || createPlannedSession.isPending}>
+            {createPlannedSession.isPending ? 'Planning…' : 'Plan Session'}
+          </Button>
+        </div>
+      </div>
+
+      <PlayerPickerModal
+        isOpen={showPlayerPicker}
+        selectedIds={expectedPlayerIds}
+        onConfirm={setExpectedPlayerIds}
+        onClose={() => setShowPlayerPicker(false)}
+      />
+    </>
   )
 }
 

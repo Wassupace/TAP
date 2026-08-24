@@ -181,6 +181,11 @@ body {
   position: absolute; bottom: 7px;
 }
 .cal-day.selected .cal-dot { background: #fff; }
+.cal-plus {
+  font-size: 11px; font-weight: 800; line-height: 1; color: var(--orange);
+  position: absolute; bottom: 4px;
+}
+.cal-day.selected .cal-plus { color: #fff; }
 
 /* ---- Spot queue strip ---- */
 .spot-done     { background: rgba(16,185,129,.16); color: var(--green); }
