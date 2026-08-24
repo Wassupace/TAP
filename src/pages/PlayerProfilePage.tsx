@@ -350,6 +350,7 @@ export default function PlayerProfilePage() {
           onModeChange={setChartMode}
           onClose={() => setChartMode(null)}
           playerName={player.nickname}
+          playerId={player.id}
           heatEntries={heatEntries}
           ftMakes={shooting?.ftMakes ?? 0}
           ftAttempts={shooting?.ftAttempts ?? 0}

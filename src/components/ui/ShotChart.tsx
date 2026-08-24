@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { ChartMode, HeatEntry } from '../../types'
+import type { ChartMode, HeatEntry, ShotSpot } from '../../types'
 import { HandToggle } from './HandToggle'
+import { SpotHistorySheet } from './SpotHistorySheet'
 
 /* ---- Court geometry constants (all in SVG units, viewBox 0 0 500 460) ---- */
 const CX = 250, CY = 392
@@ -105,6 +106,22 @@ function zoneColor(makes: number, attempts: number, type: ZoneType): string {
 
 const ZONES = buildZones()
 
+// Task 11 (PRD §4.4): reverse of the per-zone `spotZoneMap` built inside the
+// component below (zone id → underlying spot) — kept as its own top-level
+// constant rather than reusing/reshaping `spotZoneMap` itself, since that
+// map is explicitly not to be touched this phase (Global Constraints:
+// extending it to the other 5 zone ids — `restricted`, `rblk`, `rpost`,
+// `lpost`, `lblk` — is deferred to Phase 4's Drill-setup UI work). Only the
+// 10 mid-range/three-point zone ids appear here; any zone id absent from
+// this map (the 5 interior zones above) intentionally gets no onClick.
+const ZONE_TO_SPOT: Record<string, ShotSpot> = {
+  mr0l: 'left0',   t0l: 'left0',
+  mr45l: 'left45', t45l: 'left45',
+  mrtop: 'center', ttop: 'center',
+  mr45r: 'right45', t45r: 'right45',
+  mr0r: 'right0',   t0r: 'right0',
+}
+
 function isActive(zone: Zone, mode: ChartMode): boolean {
   if (mode === 'three') return zone.type === 'three'
   if (mode === 'mid')   return zone.type !== 'three'
@@ -149,13 +166,19 @@ interface ShotChartProps {
   onModeChange: (m: ChartMode) => void
   onClose: () => void
   playerName?: string
+  playerId?: string            // if provided, enables the per-spot history sheet (Task 11)
   heatEntries?: HeatEntry[]    // if provided, enables L/R/ALL hand filtering
   ftMakes?: number             // free throw makes (default 0)
   ftAttempts?: number          // free throw attempts (default 0)
 }
 
-export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', heatEntries, ftMakes = 0, ftAttempts = 0 }: ShotChartProps) {
+export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', playerId, heatEntries, ftMakes = 0, ftAttempts = 0 }: ShotChartProps) {
   const [handMode, setHandMode] = useState<'all' | 'left' | 'right'>('all')
+  // Task 11: which spot's history sheet is open (null = closed). Tapping
+  // either the mid or three zone for the same spot sets this to that
+  // spot's id — both zones share one entry in ZONE_TO_SPOT, so they open
+  // the identical sheet scoped to that spot.
+  const [historySpot, setHistorySpot] = useState<ShotSpot | null>(null)
 
   // Build per-zone stat overrides when heatEntries are provided
   const zoneStats: Record<string, { makes: number; attempts: number }> = {}
@@ -251,8 +274,23 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', 
               const active = isActive(z, mode)
               const { makes, attempts } = getZoneData(z)
               const fill = active ? zoneColor(makes, attempts, z.type) : 'rgba(156,163,175,0.18)'
+              // Task 11: only the 10 mid-range/three-point zones that map to
+              // a real spot (via ZONE_TO_SPOT) open the history sheet — the
+              // interior paint zones (restricted/rblk/rpost/lpost/lblk) have
+              // no entry there and stay non-interactive, unchanged from
+              // before this task.
+              const spotForZone = ZONE_TO_SPOT[z.id]
+              const clickable = !!spotForZone && !!playerId
               return (
-                <path key={z.id} d={z.d} fill={fill} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+                <path
+                  key={z.id}
+                  d={z.d}
+                  fill={fill}
+                  stroke="rgba(255,255,255,0.06)"
+                  strokeWidth={1}
+                  onClick={clickable ? () => setHistorySpot(spotForZone) : undefined}
+                  style={{ cursor: clickable ? 'pointer' : undefined }}
+                />
               )
             })}
           </g>
@@ -308,6 +346,19 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', 
 
       {/* Tap outside to close */}
       <div className="absolute inset-0 -z-10" onClick={onClose} />
+
+      {/* Task 11: per-spot history sheet, opened by tapping one of the 10
+          mid-range/three-point zones above. Stacked above this overlay's
+          own z-[70] via the sheet's own z-index (80), same as other
+          bottom-sheet modals in this app. */}
+      {historySpot && playerId && (
+        <SpotHistorySheet
+          playerId={playerId}
+          spot={historySpot}
+          handMode={handMode}
+          onClose={() => setHistorySpot(null)}
+        />
+      )}
     </div>
   )
 }
