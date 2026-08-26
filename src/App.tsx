@@ -11,6 +11,9 @@ import MatchActivePage from './pages/MatchActivePage'
 import MatchRecapPage from './pages/MatchRecapPage'
 import CompetitiveSetupPage from './pages/CompetitiveSetupPage'
 import BanksPage from './pages/BanksPage'
+import MiddiesPage from './pages/MiddiesPage'
+import NextPage from './pages/NextPage'
+import GenericPage from './pages/GenericPage'
 import DrillPage from './pages/DrillPage'
 import DrillRecapPage from './pages/DrillRecapPage'
 import SessionRecapPage from './pages/SessionRecapPage'
@@ -33,6 +36,9 @@ export default function App() {
         <Route path="/match/recap" element={<MatchRecapPage />} />
         <Route path="/activity/setup" element={<CompetitiveSetupPage />} />
         <Route path="/activity/banks" element={<BanksPage />} />
+        <Route path="/activity/middies" element={<MiddiesPage />} />
+        <Route path="/activity/next" element={<NextPage />} />
+        <Route path="/activity/generic" element={<GenericPage />} />
         <Route path="/drill" element={<DrillPage />} />
         <Route path="/drill/recap" element={<DrillRecapPage />} />
         <Route path="/session-recap/:id" element={<SessionRecapPage />} />

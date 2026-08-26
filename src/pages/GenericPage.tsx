@@ -7,27 +7,20 @@ import { useSessionStore } from '../stores/sessionStore'
 import { useLogActivity } from '../hooks/useActivityFeed'
 import { dbInsert } from '../lib/db'
 import { playerColor } from '../utils/playerColor'
-import { SPOT_LABELS } from '../types'
 
-export default function BanksPage() {
+export default function GenericPage() {
   const nav = useNavigate()
-  const { gameId, spot, players, reset } = useCompetitiveStore()
+  const { gameId, customName, players, reset } = useCompetitiveStore()
   const { activeSessionId } = useSessionStore()
   const logActivity = useLogActivity()
 
-  // Tap-in-elimination-order (PRD §5's tap-to-cycle ruling, applied here):
-  // each tap on a still-playing player appends their id, in elimination
-  // order. The one player never tapped is the winner.
+  // Same tap-in-elimination-order ranking as Banks (PRD §6.4).
   const [eliminationOrder, setEliminationOrder] = useState<string[]>([])
-  const [margin, setMargin] = useState(7)
 
   const remaining = players.filter(p => !eliminationOrder.includes(p.id))
   const isComplete = players.length >= 2 && remaining.length <= 1
   const winner = isComplete ? remaining[0] : undefined
 
-  // Display order once complete: winner first, then eliminated players in
-  // reverse tap order (most recently eliminated = 2nd place, first
-  // eliminated = last place) — rank is just this array's index + 1.
   const rankedPlayers = isComplete && winner
     ? [winner, ...[...eliminationOrder].reverse().map(id => players.find(p => p.id === id)!)]
     : []
@@ -48,7 +41,6 @@ export default function BanksPage() {
           game_id: gameId,
           player_id: p.id,
           rank: i + 1,
-          score: i === 0 ? margin : null,
         }).catch(() => {})
       )
     )
@@ -57,7 +49,7 @@ export default function BanksPage() {
         session_id: activeSessionId,
         activity_type: 'competitiveGame',
         reference_id: gameId,
-        feed_summary: `Banks · ${winner.nickname} won by ${margin}`,
+        feed_summary: `${customName || 'Generic'} · ${winner.nickname} won`,
       })
     }
     reset()
@@ -79,7 +71,6 @@ export default function BanksPage() {
     <div className="min-h-dvh px-[18px] pt-[54px] pb-28">
       <BackButton onClick={() => nav('/activity/setup')}>Setup</BackButton>
 
-      {/* Hero gradient header */}
       <div style={{
         background: 'var(--hero-gradient)',
         border: '1px solid rgba(255,255,255,0.08)',
@@ -89,13 +80,13 @@ export default function BanksPage() {
         marginTop: 16,
       }}>
         <p style={{ fontSize: 11, color: 'var(--hero-eyebrow)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, margin: '0 0 4px' }}>
-          Banks{spot ? ` · ${SPOT_LABELS[spot]}` : ''}
+          {customName || 'Generic'}
         </p>
         <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 20 }}>Result</div>
       </div>
 
       <p className="text-[var(--dim)] text-[13px] mb-4">
-        {players.length < 2 ? 'Need at least 2 players to play Banks.' : "Tap a player as they're eliminated — last standing wins."}
+        {players.length < 2 ? 'Need at least 2 players.' : "Tap a player as they're eliminated — last standing wins."}
       </p>
 
       {!isComplete && remaining.length > 0 && (
@@ -162,34 +153,9 @@ export default function BanksPage() {
         </>
       )}
 
-      {/* Winner margin */}
-      <div
-        className="flex items-center justify-between p-4 mt-3"
-        style={{ borderRadius: 'var(--r-md)', background: 'var(--panel)', border: '1px solid var(--line)' }}
-      >
-        <span className="text-[13px] text-[var(--dim)]">Winner's final margin</span>
-        <div
-          className="flex items-center justify-between p-1.5 w-[130px]"
-          style={{ borderRadius: 'var(--r-md)', background: 'var(--panel-2)', border: '1px solid var(--line)' }}
-        >
-          <button
-            onClick={() => setMargin(m => Math.max(0, m - 1))}
-            className="w-[44px] h-[44px] border-0 text-chalk text-[22px] font-bold cursor-pointer"
-            style={{ borderRadius: 'var(--r-sm)', background: 'var(--panel-3)' }}
-          >−</button>
-          <span className="font-display text-[24px]">{margin}</span>
-          <button
-            onClick={() => setMargin(m => m + 1)}
-            className="w-[44px] h-[44px] border-0 text-chalk text-[22px] font-bold cursor-pointer"
-            style={{ borderRadius: 'var(--r-sm)', background: 'var(--panel-3)' }}
-          >+</button>
-        </div>
-      </div>
-
       <div className="fixed bottom-[18px] left-[14px] right-[14px]">
         <Button variant="primary" onClick={handleSave} disabled={!isComplete}>Save Result</Button>
       </div>
     </div>
   )
 }
-
