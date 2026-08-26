@@ -16,6 +16,8 @@ services:
       - ./supabase/migrations/002_v54_additions.sql:/docker-entrypoint-initdb.d/002_v54.sql
       - ./supabase/migrations/003_v58_additions.sql:/docker-entrypoint-initdb.d/003_v58.sql
       - ./supabase/migrations/004_phase2_final_fixes.sql:/docker-entrypoint-initdb.d/004_phase2.sql
+      - ./supabase/migrations/005_phase3_matches.sql:/docker-entrypoint-initdb.d/005_phase3.sql
+      - ./supabase/migrations/006_session_attendances_unique.sql:/docker-entrypoint-initdb.d/006_attendance_fix.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d tap"]
       interval: 5s

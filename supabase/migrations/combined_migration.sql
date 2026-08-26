@@ -155,3 +155,12 @@ ALTER TABLE sessions
 -- to `now()` at migration time and every future insert to its own creation
 -- time.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+
+-- Phase 3: Duration Wave mode (PRD §5.1)
+ALTER TABLE matches ALTER COLUMN target_score DROP NOT NULL;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS duration_minutes int;
+
+-- Fix: session_attendances upsert onConflict target had no matching unique constraint
+ALTER TABLE session_attendances
+  ADD CONSTRAINT session_attendances_session_player_unique UNIQUE (session_id, player_id);
+
