@@ -13,6 +13,7 @@ import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { playerColor } from '../utils/playerColor'
 import { idsMatchingRoster, newNicknamesFor, noLongerSelectedNicknames } from '../utils/rosterPlayerMatch'
 import { todayISODate } from '../utils/todayISODate'
+import type { Session } from '../types'
 
 function fmt(s: number) {
   const h = Math.floor(s / 3600)
@@ -281,6 +282,109 @@ function PlannedSessionPrompt({ location, isPending, onYes, onNo, onClose }: {
   )
 }
 
+// ── Planned-session card (PRD §3.3) ─────────────────────────────────────────
+// "The homepage surfaces the next upcoming planned session as a prominent
+// card above the Start New Session button." Reuses the same data
+// (`useTodaysPlannedSession`) and Start Now/Review Details choice already
+// built for CalendarPage's `StartOrReviewModal` and this page's own
+// `PlannedSessionPrompt` — this was the one entry point Phase 2 never
+// wired up.
+function PlannedSessionCard({ location, expectedCount, onTap }: {
+  location: string
+  expectedCount: number
+  onTap: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onTap}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        width: 280, padding: '14px 16px', textAlign: 'left',
+        background: 'var(--orange-soft)', border: '1px solid rgba(255,90,31,.3)',
+        borderRadius: 'var(--r-md)', cursor: 'pointer',
+      }}
+    >
+      <span style={{ width: 22, height: 22, display: 'flex', color: 'var(--orange)', flexShrink: 0 }}>{Icons.calendar}</span>
+      <div>
+        <div style={{ fontSize: 11, color: 'var(--orange-2)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700 }}>
+          Planned Session Today
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--chalk)', marginTop: 2 }}>
+          {location}{expectedCount > 0 ? ` · ${expectedCount} expected` : ''}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function PlannedSessionChoiceModal({ session, isPending, playersLoading, onStartNow, onReviewDetails, onClose }: {
+  session: Session
+  isPending: boolean
+  playersLoading: boolean
+  onStartNow: () => void
+  onReviewDetails: () => void
+  onClose: () => void
+}) {
+  const expectedCount = session.expected_player_ids.length
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 90,
+        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ width: '100%', background: 'var(--panel)', borderRadius: 'var(--r-lg) var(--r-lg) 0 0', padding: '24px 18px 40px' }}
+      >
+        <div style={{ fontFamily: '"Archivo Expanded", Archivo, sans-serif', fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
+          {session.location}
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--dim)', margin: '0 0 20px' }}>
+          {expectedCount > 0
+            ? `${expectedCount} expected player${expectedCount > 1 ? 's' : ''} saved for this session.`
+            : 'No expected players were saved for this session.'}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onStartNow}
+            disabled={isPending || playersLoading}
+            style={{
+              width: '100%', minHeight: 58,
+              background: 'linear-gradient(180deg, var(--orange-2), var(--orange))',
+              border: 'none', borderRadius: 'var(--r-md)', color: '#fff',
+              fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+              fontWeight: 800, fontSize: 15, textTransform: 'uppercase',
+              letterSpacing: '0.04em', cursor: isPending ? 'not-allowed' : 'pointer',
+              boxShadow: 'var(--accent-glow)', opacity: (isPending || playersLoading) ? 0.6 : 1,
+            }}
+          >
+            {isPending ? 'Starting…' : playersLoading ? 'Loading roster…' : 'Start Now'}
+          </button>
+          <button
+            type="button"
+            onClick={onReviewDetails}
+            disabled={isPending}
+            style={{
+              width: '100%', minHeight: 54, borderRadius: 'var(--r-md)',
+              fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+              fontWeight: 800, fontSize: 14, letterSpacing: '.02em', textTransform: 'uppercase',
+              cursor: isPending ? 'not-allowed' : 'pointer', border: '1px solid var(--line-2)',
+              background: 'var(--panel-2)', color: 'var(--dim)', opacity: isPending ? 0.6 : 1,
+            }}
+          >
+            Review Details
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Dashboard root ─────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -290,6 +394,11 @@ export default function DashboardPage() {
   const openSession = useOpenSession()
   const { data: todaysPlannedSession } = useTodaysPlannedSession()
   const { start: startPlannedSession, isPending: startPending, playersLoading } = useStartPlannedSession()
+  // PRD §3.3's Dashboard planned-session card — Start Now/Review Details
+  // choice, opened by tapping the card (separate from `pendingAdHoc` below,
+  // which is the ad-hoc-on-a-planned-day disambiguation for a *different*
+  // entry point, "Start New Session").
+  const [plannedCardChoiceOpen, setPlannedCardChoiceOpen] = useState(false)
   // Task 4 (PRD §3.3): "Start New Session" location + players, held while the
   // Yes/No disambiguation prompt below is open (only set when today already
   // has a `state: 'planned'` session) — null means no prompt, and clearing
@@ -332,9 +441,11 @@ export default function DashboardPage() {
     return (
       <>
         <IdleDashboard
+          plannedSession={todaysPlannedSession ?? null}
           onStart={() => setShowSetup(true)}
           onCalendar={() => nav('/calendar')}
           onPlayers={() => nav('/players')}
+          onPlannedCardTap={() => setPlannedCardChoiceOpen(true)}
         />
         {showSetup && (
           <NewSessionModal
@@ -358,6 +469,22 @@ export default function DashboardPage() {
             onClose={() => setPendingAdHoc(null)}
           />
         )}
+        {plannedCardChoiceOpen && todaysPlannedSession && (
+          <PlannedSessionChoiceModal
+            session={todaysPlannedSession}
+            isPending={startPending}
+            playersLoading={playersLoading}
+            onStartNow={async () => {
+              await startPlannedSession(todaysPlannedSession)
+              setPlannedCardChoiceOpen(false)
+            }}
+            onReviewDetails={() => {
+              setPlannedCardChoiceOpen(false)
+              nav(`/calendar/attendance/${todaysPlannedSession.id}`)
+            }}
+            onClose={() => setPlannedCardChoiceOpen(false)}
+          />
+        )}
       </>
     )
   }
@@ -367,10 +494,12 @@ export default function DashboardPage() {
 
 // ── Idle state ─────────────────────────────────────────────────────────────────
 
-function IdleDashboard({ onStart, onCalendar, onPlayers }: {
+function IdleDashboard({ plannedSession, onStart, onCalendar, onPlayers, onPlannedCardTap }: {
+  plannedSession: Session | null
   onStart: () => void
   onCalendar: () => void
   onPlayers: () => void
+  onPlannedCardTap: () => void
 }) {
   const nav = useNavigate()
   return (
@@ -403,6 +532,14 @@ function IdleDashboard({ onStart, onCalendar, onPlayers }: {
             Start logging when you hit the court. Or open a planned session from the calendar.
           </p>
         </div>
+
+        {plannedSession && (
+          <PlannedSessionCard
+            location={plannedSession.location}
+            expectedCount={plannedSession.expected_player_ids.length}
+            onTap={onPlannedCardTap}
+          />
+        )}
 
         <button
           type="button"
