@@ -6,12 +6,14 @@ import { Icons } from '../components/ui/icons'
 import { useMatchStore } from '../stores/matchStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useLogActivity } from '../hooks/useActivityFeed'
+import { usePlayers } from '../hooks/usePlayers'
 
 export default function MatchRecapPage() {
   const nav = useNavigate()
-  const { completedGames, format, matchId, reset } = useMatchStore()
+  const { completedGames, format, matchId, reset, resetForRematch } = useMatchStore()
   const { activeSessionId } = useSessionStore()
   const logActivity = useLogActivity()
+  const { data: players = [] } = usePlayers()
   const totalMin = Math.round(completedGames.reduce((s, g) => s + g.durationSeconds, 0) / 60)
 
   const aWins  = completedGames.filter(g => g.teamAScore > g.teamBScore).length
@@ -24,10 +26,49 @@ export default function MatchRecapPage() {
   const longest = completedGames.reduce<typeof completedGames[0] | null>((best, g) =>
     !best || g.durationSeconds > best.durationSeconds ? g : best, null)
 
+  // Tie-breaker (PRD §5.3 ruling): a tie in game-win count is broken by the
+  // largest aggregate point differential across all games; still equal is
+  // a Draw. `totalDiff` is Team A's own aggregate differential — Team B's
+  // is always its exact negation, so its sign alone decides the winner.
+  const totalDiff = completedGames.reduce((s, g) => s + (g.teamAScore - g.teamBScore), 0)
+  const tieBreakSide: 'A' | 'B' | 'draw' | null =
+    aWins !== bWins ? null : totalDiff > 0 ? 'A' : totalDiff < 0 ? 'B' : 'draw'
+
+  // Dominance: the team with strictly more game wins (no tie-breaker
+  // applied here — a tie has no dominant side), plus its average winning
+  // margin across just those wins.
+  const dominantSide: 'A' | 'B' | null = aWins > bWins ? 'A' : bWins > aWins ? 'B' : null
+  const dominantGames = dominantSide
+    ? completedGames.filter(g => dominantSide === 'A' ? g.teamAScore > g.teamBScore : g.teamBScore > g.teamAScore)
+    : []
+  const avgMargin = dominantGames.length > 0
+    ? dominantGames.reduce((s, g) => s + Math.abs(g.teamAScore - g.teamBScore), 0) / dominantGames.length
+    : 0
+
+  // Best side: the player present on the winning team across the most
+  // completed games (a draw contributes to neither side's tally).
+  const winTally = new Map<string, number>()
+  completedGames.forEach(g => {
+    if (g.teamAScore > g.teamBScore) g.teamAPlayerIds.forEach(id => winTally.set(id, (winTally.get(id) ?? 0) + 1))
+    else if (g.teamBScore > g.teamAScore) g.teamBPlayerIds.forEach(id => winTally.set(id, (winTally.get(id) ?? 0) + 1))
+  })
+  let bestPlayerId: string | null = null
+  let bestCount = 0
+  winTally.forEach((count, id) => {
+    if (count > bestCount) { bestCount = count; bestPlayerId = id }
+  })
+  const bestPlayer = bestPlayerId ? players.find(p => p.id === bestPlayerId) : null
+
+  const resultValue = `Team A ${aWins}–${bWins} Team B across ${completedGames.length} game${completedGames.length !== 1 ? 's' : ''} · ${totalMin}m`
+    + (tieBreakSide === 'draw' ? ' · Draw on point differential'
+      : tieBreakSide ? ` · Team ${tieBreakSide} wins on point differential` : '')
+
   const callouts = [
-    { icon: Icons.trophy, label: 'Result', value: `Team A ${aWins}–${bWins} Team B across ${completedGames.length} game${completedGames.length !== 1 ? 's' : ''} · ${totalMin}m` },
+    { icon: Icons.trophy, label: 'Result', value: resultValue },
     closest ? { icon: Icons.flame, label: 'Closest game', value: `Game ${closest.gameNumber} — decided by ${Math.abs(closest.teamAScore - closest.teamBScore)} point${Math.abs(closest.teamAScore - closest.teamBScore) !== 1 ? 's' : ''}` } : null,
     longest && completedGames.length > 1 ? { icon: Icons.clock, label: 'Longest game', value: `Game ${longest.gameNumber} — ${Math.round(longest.durationSeconds / 60)} min` } : null,
+    dominantSide && dominantGames.length > 0 ? { icon: Icons.bolt, label: 'Dominance', value: `Team ${dominantSide} — ${dominantGames.length} win${dominantGames.length !== 1 ? 's' : ''}, avg margin ${avgMargin.toFixed(1)}` } : null,
+    bestPlayer && bestCount > 0 ? { icon: Icons.target, label: 'Best side', value: `${bestPlayer.nickname} — on the winning team ${bestCount} time${bestCount !== 1 ? 's' : ''}` } : null,
   ].filter(Boolean) as { icon: React.ReactNode; label: string; value: string }[]
 
   async function handleDone(rematch = false) {
@@ -39,9 +80,17 @@ export default function MatchRecapPage() {
         feed_summary: `${format} · ${completedGames.length} game${completedGames.length !== 1 ? 's' : ''} · ${totalMin}min · Team A ${aWins}–${bWins}`,
       })
     }
-    reset()
+    if (rematch) {
+      // Quick Rematch (PRD §5.4): keep format/teamA/teamB/subQueue, only
+      // clear scores/completedGames/timer — lands back on Match Setup
+      // pre-filled instead of empty.
+      resetForRematch()
+    } else {
+      reset()
+    }
     nav(rematch ? '/match/setup' : '/')
   }
+
 
   return (
     <div className="min-h-dvh flex flex-col">

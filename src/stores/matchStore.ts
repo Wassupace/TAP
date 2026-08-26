@@ -17,6 +17,7 @@ interface MatchStore {
   format: MatchFormat
   targetScore: number
   scoringStyle: ScoringStyle
+  durationMinutes: number
   teamA: Player[]
   teamB: Player[]
   subQueue: Player[]
@@ -31,16 +32,21 @@ interface MatchStore {
   setFormat: (f: MatchFormat) => void
   setTargetScore: (n: number) => void
   setScoringStyle: (s: ScoringStyle) => void
+  setDurationMinutes: (n: number) => void
   randomize: (pool: Player[]) => void
   movePlayer: (playerId: string, to: 'A' | 'B' | 'sub') => void
+  syncRoster: (selectedIds: string[], allPlayers: Player[]) => void
   incrementScore: (team: 'A' | 'B', pts: number) => void
   setScore: (team: 'A' | 'B', value: number) => void
   startTimer: () => void
   stopTimer: () => number
+  pauseTimer: () => void
+  resumeTimer: () => void
   tickTimer: () => void
   endGame: () => CompletedGame
   undoLastGame: () => void
   reset: () => void
+  resetForRematch: () => void
 }
 
 export const useMatchStore = create<MatchStore>((set, get) => ({
@@ -48,6 +54,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   format: '3v3',
   targetScore: 11,
   scoringStyle: 'targetScore',
+  durationMinutes: 10,
   teamA: [],
   teamB: [],
   subQueue: [],
@@ -62,6 +69,7 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   setFormat: (f) => set({ format: f, targetScore: FORMAT_DEFAULT_TARGET[f] }),
   setTargetScore: (n) => set({ targetScore: n }),
   setScoringStyle: (s) => set({ scoringStyle: s }),
+  setDurationMinutes: (n) => set({ durationMinutes: Math.max(1, n) }),
 
   randomize: (pool) => {
     const shuffled = [...pool].sort(() => Math.random() - 0.5)
@@ -86,6 +94,26 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
     })
   },
 
+  // Mid-game roster edit (PRD §5.5): reconciles the full-roster selection
+  // from PlayerPickerModal against the current teamA/teamB/subQueue split.
+  // Players kept keep their current side; a dropped player is removed
+  // outright (injury); a newly-added player (late arrival) lands in
+  // subQueue, same as a fresh randomize() would place an unused player.
+  syncRoster: (selectedIds, allPlayers) => {
+    const { teamA, teamB, subQueue } = get()
+    const currentIds = new Set([...teamA, ...teamB, ...subQueue].map(p => p.id))
+    const keep = (arr: Player[]) => arr.filter(p => selectedIds.includes(p.id))
+    const newPlayers = selectedIds
+      .filter(id => !currentIds.has(id))
+      .map(id => allPlayers.find(p => p.id === id))
+      .filter((p): p is Player => !!p)
+    set({
+      teamA: keep(teamA),
+      teamB: keep(teamB),
+      subQueue: [...keep(subQueue), ...newPlayers],
+    })
+  },
+
   incrementScore: (team, pts) => {
     if (team === 'A') set(s => ({ currentAScore: s.currentAScore + pts }))
     else set(s => ({ currentBScore: s.currentBScore + pts }))
@@ -103,6 +131,20 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
     const elapsed = start ? Math.floor((Date.now() - start) / 1000) : 0
     set({ isTimerRunning: false, gameTimerStart: null })
     return elapsed
+  },
+  // Pause/resume for the mid-game roster-edit sheet (PRD §5.5) — unlike
+  // startTimer/stopTimer (used by the main Start/Stop Game button, which
+  // intentionally restarts the count from zero), these preserve the
+  // already-elapsed `timerSeconds` across the pause by shifting
+  // `gameTimerStart` back on resume instead of resetting it to now.
+  pauseTimer: () => {
+    const { isTimerRunning, timerSeconds } = get()
+    if (!isTimerRunning) return
+    set({ isTimerRunning: false, gameTimerStart: null, timerSeconds })
+  },
+  resumeTimer: () => {
+    const { timerSeconds } = get()
+    set({ gameTimerStart: Date.now() - timerSeconds * 1000, isTimerRunning: true })
   },
   tickTimer: () => {
     const start = get().gameTimerStart
@@ -156,6 +198,13 @@ export const useMatchStore = create<MatchStore>((set, get) => ({
   reset: () => set({
     matchId: null,
     teamA: [], teamB: [], subQueue: [],
+    currentAScore: 0, currentBScore: 0,
+    gameTimerStart: null, isTimerRunning: false, timerSeconds: 0,
+    completedGames: [],
+  }),
+
+  resetForRematch: () => set({
+    matchId: null,
     currentAScore: 0, currentBScore: 0,
     gameTimerStart: null, isTimerRunning: false, timerSeconds: 0,
     completedGames: [],

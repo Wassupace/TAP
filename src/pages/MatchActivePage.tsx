@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Icons } from '../components/ui/icons'
 import { NumberPad } from '../components/ui/NumberPad'
+import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { useMatchStore } from '../stores/matchStore'
+import { usePlayers } from '../hooks/usePlayers'
+import { playAlarmSound } from '../utils/playAlarm'
 
 function fmtSec(s: number) {
   return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`
@@ -11,11 +14,34 @@ function fmtSec(s: number) {
 
 export default function MatchActivePage() {
   const nav = useNavigate()
-  const { targetScore, currentAScore, currentBScore, isTimerRunning, timerSeconds, completedGames, incrementScore, setScore, startTimer, stopTimer, tickTimer, endGame, undoLastGame } = useMatchStore()
+  const {
+    scoringStyle, durationMinutes, targetScore, currentAScore, currentBScore,
+    isTimerRunning, timerSeconds, completedGames, teamA, teamB, subQueue,
+    incrementScore, setScore, startTimer, stopTimer, pauseTimer, resumeTimer,
+    tickTimer, endGame, undoLastGame, syncRoster,
+  } = useMatchStore()
+  const { data: allPlayers = [] } = usePlayers()
 
   const [numberPadTeam, setNumberPadTeam] = useState<'A' | 'B' | null>(null)
+  const [rosterEditOpen, setRosterEditOpen] = useState(false)
+  // Whether the timer was actually running when the roster sheet opened —
+  // only resume it on close if it was (PRD §5.5's "resume the timer" only
+  // applies if a wave/game was in progress to begin with).
+  const wasRunningRef = useRef(false)
+  const rosterIds = [...teamA, ...teamB, ...subQueue].map(p => p.id)
+  const isWave = scoringStyle === 'durationWave'
+  const waveTotalSeconds = durationMinutes * 60
+  const waveRemaining = Math.max(0, waveTotalSeconds - timerSeconds)
+  // Guards the alarm to fire once per wave — reset whenever a new wave starts.
+  const alarmFiredRef = useRef(false)
 
   const canUndo = completedGames.length > 0 && !isTimerRunning
+  // Winners Ball (PRD §5.3): the team that won the most recently completed
+  // game keeps possession into the next one — a draw carries no possession.
+  const lastGame = completedGames[completedGames.length - 1]
+  const possession = lastGame
+    ? (lastGame.teamAScore > lastGame.teamBScore ? 'A' : lastGame.teamAScore < lastGame.teamBScore ? 'B' : null)
+    : null
 
   useEffect(() => {
     if (!isTimerRunning) return
@@ -23,7 +49,33 @@ export default function MatchActivePage() {
     return () => clearInterval(id)
   }, [isTimerRunning, tickTimer])
 
+  useEffect(() => {
+    if (!isWave || !isTimerRunning) return
+    if (waveRemaining <= 0 && !alarmFiredRef.current) {
+      alarmFiredRef.current = true
+      playAlarmSound()
+      stopTimer()
+    }
+  }, [isWave, isTimerRunning, waveRemaining, stopTimer])
+
   const handleEndGame = () => endGame()
+  const handleStartTimer = () => {
+    alarmFiredRef.current = false
+    startTimer()
+  }
+
+  // Mid-game roster edit (PRD §5.5): pause without losing elapsed time,
+  // open the shared PlayerPickerModal pre-filled with the full current
+  // roster, resume on close only if a wave/game was actually running.
+  const handleOpenRoster = () => {
+    wasRunningRef.current = isTimerRunning
+    if (isTimerRunning) pauseTimer()
+    setRosterEditOpen(true)
+  }
+  const handleCloseRoster = () => {
+    setRosterEditOpen(false)
+    if (wasRunningRef.current) resumeTimer()
+  }
 
   return (
     <div className="min-h-dvh flex flex-col">
@@ -34,15 +86,18 @@ export default function MatchActivePage() {
             <span className="w-[18px] h-[18px]">{Icons.back}</span> Setup
           </button>
           <div className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-bold" style={{ background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
-            Game {completedGames.length + 1} · to {targetScore}
+            {isWave ? `Wave ${completedGames.length + 1} · ${durationMinutes}min` : `Game ${completedGames.length + 1} · to ${targetScore}`}
           </div>
         </div>
 
         {/* Score panels */}
         <div className="flex gap-2.5 mb-3.5">
           {/* Team A */}
-          <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,.33)', borderRadius: 'var(--r-lg)' }}>
-            <div className="text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--blue)' }}>Team A</div>
+          <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(59,130,246,0.08)', border: possession === 'A' ? '2px solid var(--blue)' : '1px solid rgba(59,130,246,.33)', borderRadius: 'var(--r-lg)' }}>
+            <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--blue)' }}>
+              {possession === 'A' && <span className="w-3.5 h-3.5">{Icons.trophy}</span>}
+              Team A
+            </div>
             <button
               type="button"
               onClick={() => setNumberPadTeam('A')}
@@ -57,8 +112,11 @@ export default function MatchActivePage() {
             </div>
           </div>
           {/* Team B */}
-          <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,.33)', borderRadius: 'var(--r-lg)' }}>
-            <div className="text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--red)' }}>Team B</div>
+          <div className="flex-1 p-3.5 text-center" style={{ background: 'rgba(239,68,68,0.08)', border: possession === 'B' ? '2px solid var(--red)' : '1px solid rgba(239,68,68,.33)', borderRadius: 'var(--r-lg)' }}>
+            <div className="flex items-center justify-center gap-1.5 text-[12px] font-bold tracking-[.06em] uppercase mb-1" style={{ color: 'var(--red)' }}>
+              {possession === 'B' && <span className="w-3.5 h-3.5">{Icons.trophy}</span>}
+              Team B
+            </div>
             <button
               type="button"
               onClick={() => setNumberPadTeam('B')}
@@ -74,15 +132,16 @@ export default function MatchActivePage() {
           </div>
         </div>
 
-        {/* Timer */}
+        {/* Timer — count-up for Target Score, countdown-to-zero-with-alarm for
+            Duration Wave (PRD §5.1) */}
         <button
-          onClick={() => isTimerRunning ? stopTimer() : startTimer()}
+          onClick={() => isTimerRunning ? stopTimer() : handleStartTimer()}
           className="w-full flex items-center justify-center gap-2 min-h-[54px] font-heading text-[15px] font-bold tracking-wide uppercase mb-2 border-0 cursor-pointer transition-all"
           style={{ background: 'linear-gradient(180deg, var(--orange-2), var(--orange))', color: '#0c0c0c', borderRadius: 'var(--r-lg)' }}
         >
           <span className="w-5 h-5">{Icons.clock}</span>
-          <span>{isTimerRunning ? 'Stop Game' : 'Start Game'}</span>
-          <span className="font-display text-[16px] tabular-nums ml-1">{fmtSec(timerSeconds)}</span>
+          <span>{isTimerRunning ? (isWave ? 'Stop Wave' : 'Stop Game') : (isWave ? 'Start Wave' : 'Start Game')}</span>
+          <span className="font-display text-[16px] tabular-nums ml-1">{fmtSec(isWave ? waveRemaining : timerSeconds)}</span>
         </button>
 
         <Button variant="ghost" className="!min-h-[54px] !text-[14px] mb-5" onClick={handleEndGame}>
@@ -135,7 +194,7 @@ export default function MatchActivePage() {
 
       {/* Floating bar */}
       <div className="absolute bottom-[18px] left-[14px] right-[14px] flex gap-2.5">
-        <Button variant="ghost" className="!flex-none !w-[54px] !min-h-[54px]">
+        <Button variant="ghost" className="!flex-none !w-[54px] !min-h-[54px]" onClick={handleOpenRoster}>
           <span className="w-5 h-5">{Icons.roster}</span>
         </Button>
         <Button variant="primary" className="flex-1 !min-h-[54px] !text-[14px]" onClick={() => nav('/match/recap')}>
@@ -149,6 +208,13 @@ export default function MatchActivePage() {
         label={numberPadTeam === 'B' ? 'Team B score' : 'Team A score'}
         onConfirm={(v) => { if (numberPadTeam) setScore(numberPadTeam, v) }}
         onClose={() => setNumberPadTeam(null)}
+      />
+
+      <PlayerPickerModal
+        isOpen={rosterEditOpen}
+        selectedIds={rosterIds}
+        onConfirm={(ids) => { syncRoster(ids, allPlayers) }}
+        onClose={handleCloseRoster}
       />
     </div>
   )

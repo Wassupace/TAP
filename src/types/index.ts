@@ -75,7 +75,8 @@ export interface Match {
   id: string
   session_id: string
   format: MatchFormat
-  target_score: number
+  target_score?: number
+  duration_minutes?: number
   scoring_style: ScoringStyle
   started_at: string
   ended_at?: string
