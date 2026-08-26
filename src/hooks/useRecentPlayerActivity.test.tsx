@@ -20,17 +20,30 @@ import {
 
 type Result = { data?: unknown; error?: unknown }
 
-// `matches`'s chain: .select(...).contains(column, [id]) — the *same*
+// `games`'s chain: .select('match_id').contains(column, [id]) — the *same*
 // column resolves independently of call order, since useRecentPlayerActivity
 // issues two separate `.contains()` calls against this table (team_a, then
-// team_b), same pattern usePlayerWL already uses instead of a guessed
-// `.or()` filter.
-function buildMatchesChain(byColumn: { team_a_player_ids?: Result; team_b_player_ids?: Result }) {
+// team_b) to discover which matches this player appears in ANY per-game
+// roster of (final-review Fix 2) — the exact pattern `usePlayerWLByFormat`
+// (usePlayerStats.ts) uses against `games`, not a query against `matches`'
+// own static top-level arrays.
+function buildGamesChain(byColumn: { team_a_player_ids?: Result; team_b_player_ids?: Result }) {
   const chain = { select: vi.fn(), contains: vi.fn() }
   chain.select.mockReturnValue(chain)
   chain.contains.mockImplementation((column: string) =>
     Promise.resolve(byColumn[column as 'team_a_player_ids' | 'team_b_player_ids'] ?? { data: [], error: null })
   )
+  return chain
+}
+
+// `matches`'s chain: .select(...).in('id', matchIds) — the dependent
+// second round-trip that fetches each qualifying match in full (its own
+// complete `games(*)` + `session`) once the `games` lookup above has
+// decided which match ids qualify.
+function buildMatchesInChain(result: Result) {
+  const chain = { select: vi.fn(), in: vi.fn() }
+  chain.select.mockReturnValue(chain)
+  chain.in.mockResolvedValue(result)
   return chain
 }
 
@@ -51,25 +64,28 @@ function buildEqChain(result: Result) {
 }
 
 function mockTables(opts: {
-  matchesA?: Result
-  matchesB?: Result
+  gamesA?: Result
+  gamesB?: Result
+  matches?: Result
   drills?: Result
   competitive?: Result
 }) {
-  const matchesChain = buildMatchesChain({
-    team_a_player_ids: opts.matchesA ?? { data: [], error: null },
-    team_b_player_ids: opts.matchesB ?? { data: [], error: null },
+  const gamesChain = buildGamesChain({
+    team_a_player_ids: opts.gamesA ?? { data: [], error: null },
+    team_b_player_ids: opts.gamesB ?? { data: [], error: null },
   })
+  const matchesChain = buildMatchesInChain(opts.matches ?? { data: [], error: null })
   const drillsChain = buildContainsChain(opts.drills ?? { data: [], error: null })
   const competitiveChain = buildEqChain(opts.competitive ?? { data: [], error: null })
 
   ;(mockFrom as MockedFunction<typeof mockFrom>).mockImplementation((table: string) => {
+    if (table === 'games') return gamesChain
     if (table === 'matches') return matchesChain
     if (table === 'drills') return drillsChain
     if (table === 'competitive_results') return competitiveChain
     throw new Error(`unexpected table: ${table}`)
   })
-  return { matchesChain, drillsChain, competitiveChain }
+  return { gamesChain, matchesChain, drillsChain, competitiveChain }
 }
 
 let container: HTMLDivElement
@@ -124,7 +140,9 @@ async function waitForSettled(getHook: () => { isPending: boolean }) {
 describe('useRecentPlayerActivity', () => {
   it('merges matches, drills, and competitive games into one date-descending list', async () => {
     mockTables({
-      matchesA: {
+      // p1 was found via `games.team_a_player_ids` in game 1 of match-1.
+      gamesA: { data: [{ match_id: 'match-1' }], error: null },
+      matches: {
         data: [
           {
             id: 'match-1',
@@ -211,7 +229,12 @@ describe('useRecentPlayerActivity', () => {
     })
   })
 
-  it('dedupes a match returned by both the team_a and team_b contains queries', async () => {
+  it('dedupes a match found via both the team_a and team_b games queries', async () => {
+    // p1 appears in this match's per-game rosters on both sides across
+    // different games (e.g. subbed mid-match) — the team_a and team_b
+    // `.contains(...)` queries against `games` both surface 'match-dup',
+    // and the Set-based matchIds dedup (plus dedupeById on the fetched
+    // rows) must collapse that to a single activity card, not two.
     const sharedMatch = {
       id: 'match-dup',
       format: '1v1',
@@ -220,8 +243,9 @@ describe('useRecentPlayerActivity', () => {
       games: [{ team_a_score: 11, team_b_score: 4, team_a_player_ids: ['p1'], team_b_player_ids: [] }],
     }
     mockTables({
-      matchesA: { data: [sharedMatch], error: null },
-      matchesB: { data: [sharedMatch], error: null },
+      gamesA: { data: [{ match_id: 'match-dup' }], error: null },
+      gamesB: { data: [{ match_id: 'match-dup' }], error: null },
+      matches: { data: [sharedMatch], error: null },
     })
 
     const getHook = mountHook('p1')

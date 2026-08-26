@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import type { Session, SessionAttendance } from '../types'
 import { buildRecurringSessionDates } from '../utils/recurringSessions'
+import { todayISODate } from '../utils/todayISODate'
 
 export function useSessions(year: number, month: number) {
   return useQuery({
@@ -26,12 +27,20 @@ export function useSessions(year: number, month: number) {
 // exists for today, so both ad-hoc-creation flows (DashboardPage's
 // handleConfirm and CalendarPage's handleCreateAndOpen) can offer a
 // Yes/No disambiguation instead of silently creating a second, unrelated
-// session on top of one already on the calendar. "Today" is computed the
-// same way handleConfirm already does (UTC-based `toISOString()` slice)
-// rather than CalendarPage's local-date string, so this hook stays a single
-// source of truth independent of either call site.
+// session on top of one already on the calendar. "Today" is computed via
+// the shared `todayISODate()` util (final-review Fix 3) — the same LOCAL-
+// date convention CalendarPage.tsx's grid already uses — so this hook, the
+// Calendar, and the Dashboard can never disagree about what day "today" is.
+//
+// Final-review Fix 1: `.order('created_at')` before `.limit(1)` makes the
+// row this resolves to deterministic (earliest-created wins) when two
+// `state: 'planned'` sessions land on the same date — a collision Task 6's
+// weekly-recurrence feature makes newly easy (two overlapping recurring
+// series). This intentionally does not attempt to surface/disambiguate
+// between multiple same-day planned sessions to the coach — that's a larger
+// UI change, out of scope here.
 export function useTodaysPlannedSession() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayISODate()
   return useQuery({
     queryKey: ['todays-planned-session', today],
     queryFn: async () => {
@@ -40,6 +49,7 @@ export function useTodaysPlannedSession() {
         .select('*')
         .eq('date', today)
         .eq('state', 'planned')
+        .order('created_at')
         .limit(1)
         .maybeSingle()
       if (error) throw error
@@ -239,6 +249,13 @@ export function useActivateSession() {
       qc.invalidateQueries({ queryKey: ['session', vars.sessionId] })
       qc.invalidateQueries({ queryKey: ['session-attendances', vars.sessionId] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
+      // Final-review Fix 4: none of the keys above prefix-match
+      // ['todays-planned-session', <date>], so activating a session never
+      // invalidated that cache entry. Currently masked by a 30s staleTime
+      // and normal navigation patterns, but defensively correct — a
+      // partial key match invalidates every ['todays-planned-session', *]
+      // entry (TanStack Query prefix-matches by default).
+      qc.invalidateQueries({ queryKey: ['todays-planned-session'] })
     },
   })
 }

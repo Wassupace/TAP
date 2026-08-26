@@ -90,11 +90,21 @@ export function useSessionHighlights(sessionId: string): {
     }, null)
     if (!closest) return null
 
+    const scoreLine = `Closest game: ${closest.team_a_score}-${closest.team_b_score}`
+    // Final-review Fix 7: PRD §5.4's post-fact logging flow can leave
+    // `duration_seconds: 0` for a genuinely untimed match (the timer was
+    // never run) — showing "lasted 0 min" for that reads as broken data,
+    // not as "this wasn't timed". Omit the duration clause entirely rather
+    // than show a misleading 0 min; any non-zero duration is unaffected.
+    if (!closest.duration_seconds) {
+      return { icon: 'flame', label: 'Highlight', value: scoreLine }
+    }
+
     const minutes = Math.round(closest.duration_seconds / 60)
     return {
       icon: 'flame',
       label: 'Highlight',
-      value: `Closest game: ${closest.team_a_score}-${closest.team_b_score}, lasted ${minutes} min`,
+      value: `${scoreLine}, lasted ${minutes} min`,
     }
   }, [games, matchIds])
 

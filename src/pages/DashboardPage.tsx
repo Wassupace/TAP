@@ -12,6 +12,7 @@ import { useResolvePickedPlayers } from '../hooks/useResolvePickedPlayers'
 import { PlayerPickerModal } from '../components/ui/PlayerPickerModal'
 import { playerColor } from '../utils/playerColor'
 import { idsMatchingRoster, newNicknamesFor, noLongerSelectedNicknames } from '../utils/rosterPlayerMatch'
+import { todayISODate } from '../utils/todayISODate'
 
 function fmt(s: number) {
   const h = Math.floor(s / 3600)
@@ -302,7 +303,7 @@ export default function DashboardPage() {
   }, [activeSessionId, tick])
 
   async function createAdHocSession(location: string, players: string[]) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayISODate()
     try {
       const session = await openSession.mutateAsync({ location, date: today })
       setActiveSession(session.id, location, players)
@@ -316,10 +317,10 @@ export default function DashboardPage() {
     setShowSetup(false)
     // Task 4 (PRD §3.3): today's `.date` is compared against the fetched
     // row itself (rather than trusting the hook's internal "today" stayed
-    // in sync with this function's own UTC-ISO `today`) even though both
-    // are computed identically here — same defensive check as
-    // CalendarPage's handleCreateAndOpen.
-    const today = new Date().toISOString().split('T')[0]
+    // in sync with this function's own `today`) even though both are
+    // computed via the same shared `todayISODate()` util (final-review
+    // Fix 3) — same defensive check as CalendarPage's handleCreateAndOpen.
+    const today = todayISODate()
     if (todaysPlannedSession && todaysPlannedSession.date === today) {
       setPendingAdHoc({ location, players })
       return

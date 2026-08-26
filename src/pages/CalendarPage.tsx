@@ -9,6 +9,7 @@ import { useSessionStore } from '../stores/sessionStore'
 import type { Session } from '../types'
 import { isMissed, pillState, selectDayPills, pillLabel, type PillState } from '../utils/calendarPills'
 import { fmtDuration } from '../utils/formatDuration'
+import { todayISODate } from '../utils/todayISODate'
 
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
@@ -60,7 +61,10 @@ export default function CalendarPage() {
   // date gets the "plan for later" path instead of "start now". Later tasks
   // in this phase read/extend this same string comparison — keep it as the
   // single source of truth rather than duplicating the format elsewhere.
-  const todayISODateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  // Final-review Fix 3: now sourced from the shared `todayISODate()` util
+  // (this page's own original LOCAL-date convention) so this can never
+  // drift from useSessions.ts's/DashboardPage.tsx's "today".
+  const todayISODateString = todayISODate(now)
 
   const sessionDays = new Map<number, Session[]>()
   for (const s of sessions) {
@@ -189,6 +193,7 @@ export default function CalendarPage() {
                     <span
                       key={s.id}
                       className="cal-pill"
+                      title={s.location}
                       onClick={
                         s.state === 'planned'
                           ? (e) => {
@@ -202,6 +207,20 @@ export default function CalendarPage() {
                               e.stopPropagation()
                               setSelected(day.d)
                               setChoiceSession(s)
+                            }
+                          : s.state === 'completed'
+                          ? (e) => {
+                              // Final-review Fix 5 (PRD §3.9): tapping ANY
+                              // past session's pill should open its Session
+                              // Recap, not just reach it via the "Selected
+                              // day sessions" list below. Same route/nav
+                              // that list's completed-session "Open →"
+                              // button already uses (added in Task 2's fix
+                              // round) — this just makes the grid pill
+                              // itself tappable too.
+                              e.stopPropagation()
+                              setSelected(day.d)
+                              nav(`/session-recap/${s.id}`)
                             }
                           : undefined
                       }

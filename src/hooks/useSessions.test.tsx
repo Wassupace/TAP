@@ -40,11 +40,13 @@ function buildTodaysPlannedChain(result: { data?: unknown; error?: unknown }) {
   const chain = {
     select: vi.fn(),
     eq: vi.fn(),
+    order: vi.fn(),
     limit: vi.fn(),
     maybeSingle: vi.fn(),
   }
   chain.select.mockReturnValue(chain)
   chain.eq.mockReturnValue(chain)
+  chain.order.mockReturnValue(chain)
   chain.limit.mockReturnValue(chain)
   chain.maybeSingle.mockResolvedValue(result)
   ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)

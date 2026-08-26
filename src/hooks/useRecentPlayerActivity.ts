@@ -16,11 +16,24 @@ import type {
  * in." Player involvement lives in three independent tables, so this hook
  * runs three branches and merges the results client-side:
  *
- *  1. `matches` — via the same two `.contains(...)` queries
- *     `usePlayerStats.ts`'s `usePlayerWL` uses (team_a / team_b), not a
- *     guessed `.or()` filter. Per match, W/L + game count reuse
- *     `tallyBySide` (extracted from `usePlayerWL` above) scoped to just
- *     that match's own `games` embed.
+ *  1. `matches` — "was this player in this match at all" is answered via
+ *     the `games` table's PER-GAME `team_a_player_ids`/`team_b_player_ids`
+ *     arrays (final-review Fix 2), NOT `matches`' own top-level arrays.
+ *     Those top-level arrays are set once at match setup
+ *     (MatchSetupPage.tsx) and never updated, so a player subbed in
+ *     mid-match (matchStore.ts's `movePlayer`, captured per game) would be
+ *     invisible to a query against `matches` even though
+ *     `usePlayerWL`/`usePlayerWLByFormat` (usePlayerStats.ts) already
+ *     correctly count that same player via `games`. Two `.contains(...)`
+ *     queries against `games` (team_a / team_b — the exact pattern
+ *     `usePlayerWLByFormat` uses, just selecting `match_id` instead of
+ *     aggregating inline) find every match this player appears in ANY game
+ *     of; those match ids are then fetched in full (`*, games(*),
+ *     session:sessions(location)`) so each match's W/L + total game count
+ *     still reuses `tallyBySide`/`computeMatchWL` scoped to that match's
+ *     own COMPLETE `games` list, unchanged from before — only how "is this
+ *     player in this match at all" gets decided changed, not the result-
+ *     line computation once a match qualifies.
  *  2. `drills` — `.contains('player_ids', [playerId])`, with each drill's
  *     `heat_entries` filtered down to this player's own rows for their
  *     personal makes/attempts/hand.
@@ -203,22 +216,39 @@ export function useRecentPlayerActivity(playerId: string): {
     queryKey: ['player-activity', playerId],
     enabled: !!playerId,
     queryFn: async (): Promise<ActivityLogItem[]> => {
-      const matchesSelect = '*, games(*), session:sessions(location)'
-      const [matchesARes, matchesBRes, drillsRes, competitiveRes] = await Promise.all([
-        supabase.from('matches').select(matchesSelect).contains('team_a_player_ids', [playerId]),
-        supabase.from('matches').select(matchesSelect).contains('team_b_player_ids', [playerId]),
+      // Final-review Fix 2: which matches this player was in is decided by
+      // `games`'s per-game arrays (see the class doc comment above), not
+      // `matches`' own static ones — same two `.contains(...)` calls
+      // `usePlayerWLByFormat` (usePlayerStats.ts) issues against `games`,
+      // just selecting `match_id` rather than aggregating W/L inline.
+      const [gamesARes, gamesBRes, drillsRes, competitiveRes] = await Promise.all([
+        supabase.from('games').select('match_id').contains('team_a_player_ids', [playerId]),
+        supabase.from('games').select('match_id').contains('team_b_player_ids', [playerId]),
         supabase.from('drills').select('*, heat_entries(*), session:sessions(location)').contains('player_ids', [playerId]),
         supabase.from('competitive_results').select('*, competitive_games(*, session:sessions(location))').eq('player_id', playerId),
       ])
-      if (matchesARes.error) throw matchesARes.error
-      if (matchesBRes.error) throw matchesBRes.error
+      if (gamesARes.error) throw gamesARes.error
+      if (gamesBRes.error) throw gamesBRes.error
       if (drillsRes.error) throw drillsRes.error
       if (competitiveRes.error) throw competitiveRes.error
 
-      const matchRows = dedupeById([
-        ...((matchesARes.data ?? []) as unknown as MatchRow[]),
-        ...((matchesBRes.data ?? []) as unknown as MatchRow[]),
-      ])
+      const matchIds = Array.from(new Set([
+        ...((gamesARes.data ?? []) as { match_id: string }[]).map((r) => r.match_id),
+        ...((gamesBRes.data ?? []) as { match_id: string }[]).map((r) => r.match_id),
+      ]))
+
+      // A second, dependent round-trip: once we know which matches actually
+      // qualify (via `games`), fetch each one in full — its own complete
+      // `games(*)` list (every game, not just the ones this player
+      // appeared in) plus `session:sessions(location)` — so
+      // `buildMatchActivity` below can keep computing W/L and "of N games"
+      // exactly as it always has, scoped to a match's own games.
+      const matchesRes = matchIds.length > 0
+        ? await supabase.from('matches').select('*, games(*), session:sessions(location)').in('id', matchIds)
+        : { data: [] as unknown[], error: null }
+      if (matchesRes.error) throw matchesRes.error
+
+      const matchRows = dedupeById((matchesRes.data ?? []) as unknown as MatchRow[])
       const drillRows = (drillsRes.data ?? []) as unknown as DrillRow[]
       const competitiveRows = (competitiveRes.data ?? []) as unknown as CompetitiveResultRow[]
 
