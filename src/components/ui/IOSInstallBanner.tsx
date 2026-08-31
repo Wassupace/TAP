@@ -37,11 +37,17 @@ export function IOSInstallBanner() {
         className="relative flex items-start gap-3 rounded-2xl border border-[var(--line-2)] bg-[var(--panel)] p-4 shadow-xl"
         style={{ backdropFilter: 'blur(16px)' }}
       >
-        {/* App icon */}
+        {/* App icon — explicit width/height attrs + object-fit guard against
+            Safari sometimes ignoring Tailwind's h-12/w-12 on a flex child
+            with no intrinsic size hint, which renders the icon at its full
+            180x180 source resolution instead. */}
         <img
           src="/icons/apple-touch-icon-180.png"
           alt="TAP"
-          className="h-12 w-12 flex-shrink-0 rounded-xl"
+          width={48}
+          height={48}
+          className="h-12 w-12 flex-shrink-0 rounded-xl object-cover"
+          style={{ minWidth: 48, minHeight: 48, maxWidth: 48, maxHeight: 48 }}
         />
 
         {/* Text */}
