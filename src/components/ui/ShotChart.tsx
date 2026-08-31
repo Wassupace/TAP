@@ -207,8 +207,18 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', 
     })
   }
 
+  // Zones mapped to a real ShotSpot (the 10 mid/three zones) must reflect
+  // only real logged data — no fallback to the mock literals baked into
+  // buildZones() — so a spot with zero real attempts reads as "no data"
+  // (PRD §4.4) rather than showing fabricated numbers. The 5 interior
+  // zones (no ZONE_TO_SPOT entry) keep their permanent mock values, per
+  // the already-documented deferred taxonomy gap.
   function getZoneData(z: { id: string; makes: number; attempts: number }) {
-    return zoneStats[z.id] ?? { makes: z.makes, attempts: z.attempts }
+    if (ZONE_TO_SPOT[z.id]) {
+      const s = zoneStats[z.id]
+      return { makes: s?.makes ?? 0, attempts: s?.attempts ?? 0, hasRealData: !!s && s.attempts > 0 }
+    }
+    return { makes: z.makes, attempts: z.attempts, hasRealData: true }
   }
 
   const ftOn = mode === 'ft'
@@ -272,8 +282,8 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', 
           <g clipPath="url(#courtClip)">
             {ZONES.map(z => {
               const active = isActive(z, mode)
-              const { makes, attempts } = getZoneData(z)
-              const fill = active ? zoneColor(makes, attempts, z.type) : 'rgba(156,163,175,0.18)'
+              const { makes, attempts, hasRealData } = getZoneData(z)
+              const fill = active && hasRealData ? zoneColor(makes, attempts, z.type) : 'rgba(156,163,175,0.18)'
               // Task 11: only the 10 mid-range/three-point zones that map to
               // a real spot (via ZONE_TO_SPOT) open the history sheet — the
               // interior paint zones (restricted/rblk/rpost/lpost/lblk) have
@@ -301,7 +311,8 @@ export function ShotChart({ mode, onModeChange, onClose, playerName = 'Player', 
           {/* Zone labels — on top of everything */}
           {ZONES.map(z => {
             const active = isActive(z, mode)
-            const { makes, attempts } = getZoneData(z)
+            const { makes, attempts, hasRealData } = getZoneData(z)
+            if (active && !hasRealData) return null // no data: no label chip (PRD §4.4)
             const label = active ? `${makes}/${attempts}` : '—'
             const pct = active && attempts > 0 ? `${Math.round((makes / attempts) * 100)}%` : '—'
             const chipFill = active ? 'rgba(255,255,255,.82)' : 'rgba(20,27,38,.6)'
