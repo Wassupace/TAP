@@ -33,18 +33,22 @@ function buildInChain(result: { data?: unknown; error?: unknown }) {
 }
 
 // Dispatches `supabase.from(table)` to a per-table mock chain, so a single
-// test can control the `activity_records`, `games`, and `heat_entries`
-// responses independently — this hook queries all three (the latter two
-// conditionally, once the activity feed reveals which reference ids to
-// look up).
+// test can control the `activity_records`, `games`, `heat_entries`,
+// `drills`, and `players` responses independently — this hook queries all
+// five (the latter four conditionally, once earlier stages reveal which
+// reference/player ids to look up).
 function mockTables(opts: {
   activities: { data?: unknown; error?: unknown }
   games?: { data?: unknown; error?: unknown }
   heatEntries?: { data?: unknown; error?: unknown }
+  drills?: { data?: unknown; error?: unknown }
+  players?: { data?: unknown; error?: unknown }
 }) {
   const activityChain = buildActivityChain(opts.activities)
   const gamesChain = opts.games ? buildInChain(opts.games) : null
   const heatChain = opts.heatEntries ? buildInChain(opts.heatEntries) : null
+  const drillsChain = opts.drills ? buildInChain(opts.drills) : null
+  const playersChain = opts.players ? buildInChain(opts.players) : null
   ;(mockFrom as MockedFunction<typeof mockFrom>).mockImplementation((table: string) => {
     if (table === 'activity_records') return activityChain
     if (table === 'games') {
@@ -55,9 +59,17 @@ function mockTables(opts: {
       if (!heatChain) throw new Error('unexpected supabase.from("heat_entries") call')
       return heatChain
     }
+    if (table === 'drills') {
+      if (!drillsChain) throw new Error('unexpected supabase.from("drills") call')
+      return drillsChain
+    }
+    if (table === 'players') {
+      if (!playersChain) throw new Error('unexpected supabase.from("players") call')
+      return playersChain
+    }
     throw new Error(`unexpected table: ${table}`)
   })
-  return { activityChain, gamesChain, heatChain }
+  return { activityChain, gamesChain, heatChain, drillsChain, playersChain }
 }
 
 let container: HTMLDivElement
@@ -160,6 +172,11 @@ describe('useSessionHighlights', () => {
       value: 'Closest game: 11-10, lasted 19 min',
     })
     expect(getHook().toWorkOn).toBeNull()
+    expect(getHook().yourDay).toEqual({
+      icon: 'trophy',
+      label: 'Your day',
+      value: 'Winning side in 2 of 2 games',
+    })
   })
 
   it('picks the lowest-% drill spot with real attempts, never a spot with zero attempts', async () => {
@@ -168,6 +185,10 @@ describe('useSessionHighlights', () => {
         data: [
           { id: 'a1', session_id: 's1', activity_type: 'drill', reference_id: 'drill-1', created_at: '2026-08-20T10:00:00Z' },
         ],
+        error: null,
+      },
+      drills: {
+        data: [{ id: 'drill-1', shot_type: 'midRange' }],
         error: null,
       },
       heatEntries: {
@@ -193,6 +214,43 @@ describe('useSessionHighlights', () => {
       label: 'To work on',
       value: 'L 0°: 20%',
     })
+    // Not a free-throw drill, so no FT clause; no games logged, so no
+    // winning-side clause either — the whole callout is null.
+    expect(getHook().yourDay).toBeNull()
+  })
+
+  it('computes the Your day free-throw clause vs. the average target of players who shot it', async () => {
+    mockTables({
+      activities: {
+        data: [
+          { id: 'a1', session_id: 's1', activity_type: 'drill', reference_id: 'drill-1', created_at: '2026-08-20T10:00:00Z' },
+        ],
+        error: null,
+      },
+      drills: {
+        data: [{ id: 'drill-1', shot_type: 'freeThrow' }],
+        error: null,
+      },
+      heatEntries: {
+        data: [
+          { id: 'h1', drill_id: 'drill-1', player_id: 'p1', hand: 'right', makes: 41, attempts: 50, heat_number: 1, recorded_at: '2026-08-20T10:05:00Z' },
+        ],
+        error: null,
+      },
+      players: {
+        data: [{ id: 'p1', target_ft_percent: 75 }],
+        error: null,
+      },
+    })
+    const getHook = mountHook('s1')
+
+    await waitForSettled(getHook)
+
+    expect(getHook().yourDay).toEqual({
+      icon: 'trophy',
+      label: 'Your day',
+      value: 'FT 82% (above goal)',
+    })
   })
 
   it('returns both as null when the session logged neither match nor drill activity', async () => {
@@ -210,6 +268,7 @@ describe('useSessionHighlights', () => {
 
     expect(getHook().highlight).toBeNull()
     expect(getHook().toWorkOn).toBeNull()
+    expect(getHook().yourDay).toBeNull()
     expect(mockFrom).not.toHaveBeenCalledWith('games')
     expect(mockFrom).not.toHaveBeenCalledWith('heat_entries')
   })
@@ -222,5 +281,6 @@ describe('useSessionHighlights', () => {
 
     expect(getHook().highlight).toBeNull()
     expect(getHook().toWorkOn).toBeNull()
+    expect(getHook().yourDay).toBeNull()
   })
 })

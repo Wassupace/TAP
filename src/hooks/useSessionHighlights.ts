@@ -2,17 +2,25 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useActivityFeed } from './useActivityFeed'
-import { SPOT_LABELS, type Game, type HeatEntry, type RecapCallout, type ShotSpot } from '../types'
+import { SPOT_LABELS, type Drill, type Game, type HeatEntry, type Player, type RecapCallout, type ShotSpot } from '../types'
 
 /**
- * Session Recap's "Highlight" and "To work on" callouts (PRD §8, Screen 5).
+ * Session Recap's "Your day", "Highlight", and "To work on" callouts (PRD
+ * §8, Screen 5).
  *
- * Both are derived from this session's `activity_records` — the same feed
- * `SessionRecapPage` already fetches via `useActivityFeed` for its
+ * All three are derived from this session's `activity_records` — the same
+ * feed `SessionRecapPage` already fetches via `useActivityFeed` for its
  * activity-count callout and per-activity list. Calling it again here costs
  * no extra network round-trip: react-query dedupes on the
  * `['activity-feed', sessionId]` query key.
  *
+ * - `yourDay`: winning-side record across every `games` row this session
+ *   (whichever side won more games, e.g. "Winning side in 4 of 5 games"),
+ *   plus aggregate free-throw % across every `freeThrow` drill logged,
+ *   compared against the average `target_ft_percent` of the players who
+ *   shot those free throws. Either clause is omitted if this session has
+ *   no real data for it (no games / no free-throw drills); `null` only
+ *   when neither clause has data.
  * - `highlight`: the single closest-margin `games` row (smallest
  *   `|team_a_score - team_b_score|`) across every `match` activity this
  *   session logged — the same "closest game" concept `MatchRecapPage.tsx`
@@ -26,6 +34,7 @@ import { SPOT_LABELS, type Game, type HeatEntry, type RecapCallout, type ShotSpo
  *   logged. `null` when this session logged no `drill` activity.
  */
 export function useSessionHighlights(sessionId: string): {
+  yourDay: RecapCallout | null
   highlight: RecapCallout | null
   toWorkOn: RecapCallout | null
   // Settled once every stage this hook actually depends on has reached a
@@ -76,6 +85,83 @@ export function useSessionHighlights(sessionId: string): {
     },
   })
   const { data: heatEntries = [] } = heatEntriesQuery
+
+  const drillsQuery = useQuery({
+    queryKey: ['session-yourday-drills', sessionId, drillIds],
+    enabled: drillIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('drills')
+        .select('id, shot_type')
+        .in('id', drillIds)
+      if (error) throw error
+      return data as Pick<Drill, 'id' | 'shot_type'>[]
+    },
+  })
+  const { data: drills = [] } = drillsQuery
+
+  const ftHeatEntries = useMemo(() => {
+    const ftDrillIds = new Set(drills.filter(d => d.shot_type === 'freeThrow').map(d => d.id))
+    return heatEntries.filter(h => ftDrillIds.has(h.drill_id))
+  }, [drills, heatEntries])
+
+  const ftPlayerIds = useMemo(
+    () => Array.from(new Set(ftHeatEntries.map(h => h.player_id))),
+    [ftHeatEntries]
+  )
+
+  const ftPlayersQuery = useQuery({
+    queryKey: ['session-yourday-ft-players', sessionId, ftPlayerIds],
+    enabled: ftPlayerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('players')
+        .select('id, target_ft_percent')
+        .in('id', ftPlayerIds)
+      if (error) throw error
+      return data as Pick<Player, 'id' | 'target_ft_percent'>[]
+    },
+  })
+  const { data: ftPlayers = [] } = ftPlayersQuery
+
+  const yourDay = useMemo<RecapCallout | null>(() => {
+    // Winning-side clause: whichever side (a/b) won more games this
+    // session, across every match logged. Ties don't count toward either
+    // side. Omitted entirely if this session logged no decisive game.
+    let aWins = 0, bWins = 0
+    for (const g of games) {
+      if (g.team_a_score > g.team_b_score) aWins++
+      else if (g.team_b_score > g.team_a_score) bWins++
+    }
+    const decisive = aWins + bWins
+    const winSideClause = decisive > 0
+      ? `Winning side in ${Math.max(aWins, bWins)} of ${decisive} games`
+      : null
+
+    // Free-throw clause: aggregate makes/attempts across every freeThrow
+    // drill logged, compared to the average target_ft_percent of the
+    // players who actually shot them (real data only — never fabricated).
+    let ftMakes = 0, ftAttempts = 0
+    for (const h of ftHeatEntries) { ftMakes += h.makes; ftAttempts += h.attempts }
+    let ftClause: string | null = null
+    if (ftAttempts > 0) {
+      const ftPct = Math.round((ftMakes / ftAttempts) * 100)
+      if (ftPlayers.length > 0) {
+        const avgGoal = ftPlayers.reduce((sum, p) => sum + p.target_ft_percent, 0) / ftPlayers.length
+        const vsGoal = ftPct > avgGoal ? 'above goal' : ftPct < avgGoal ? 'below goal' : 'at goal'
+        ftClause = `FT ${ftPct}% (${vsGoal})`
+      } else {
+        ftClause = `FT ${ftPct}%`
+      }
+    }
+
+    if (!winSideClause && !ftClause) return null
+    return {
+      icon: 'trophy',
+      label: 'Your day',
+      value: [winSideClause, ftClause].filter(Boolean).join(' · '),
+    }
+  }, [games, ftHeatEntries, ftPlayers])
 
   const highlight = useMemo<RecapCallout | null>(() => {
     if (matchIds.length === 0) return null
@@ -144,7 +230,9 @@ export function useSessionHighlights(sessionId: string): {
   const isPending =
     activityFeed.isPending ||
     (matchIds.length > 0 && gamesQuery.isPending) ||
-    (drillIds.length > 0 && heatEntriesQuery.isPending)
+    (drillIds.length > 0 && heatEntriesQuery.isPending) ||
+    (drillIds.length > 0 && drillsQuery.isPending) ||
+    (ftPlayerIds.length > 0 && ftPlayersQuery.isPending)
 
-  return { highlight, toWorkOn, isPending }
+  return { yourDay, highlight, toWorkOn, isPending }
 }

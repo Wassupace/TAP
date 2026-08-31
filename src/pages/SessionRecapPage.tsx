@@ -13,7 +13,7 @@ export default function SessionRecapPage() {
 
   const { data: session } = useSession(sessionId)
   const { data: activities = [] } = useActivityFeed(sessionId || null)
-  const { highlight, toWorkOn } = useSessionHighlights(sessionId)
+  const { yourDay, highlight, toWorkOn } = useSessionHighlights(sessionId)
 
   const duration = fmtDuration(session?.started_at, session?.ended_at)
   const dateStr = session?.date
@@ -54,6 +54,21 @@ export default function SessionRecapPage() {
                   {matchActivities.length > 0 && drillActivities.length > 0 && ' · '}
                   {drillActivities.length > 0 && `${drillActivities.length} drill${drillActivities.length > 1 ? 's' : ''}`}
                 </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Your day callout: winning-side record + free-throw % vs goal, session-wide */}
+        {yourDay && (
+          <Card variant="accent" style={{ marginBottom: 8 }}>
+            <div className="flex gap-3">
+              <div className="w-[42px] h-[42px] grid place-items-center flex-none" style={{ borderRadius: 'var(--r-sm)', background: 'var(--orange-soft)', color: 'var(--orange-2)' }}>
+                <span className="w-[21px] h-[21px]">{Icons[yourDay.icon]}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 4 }}>{yourDay.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--chalk)', lineHeight: 1.35 }}>{yourDay.value}</div>
               </div>
             </div>
           </Card>
