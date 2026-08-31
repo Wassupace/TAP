@@ -6,6 +6,7 @@ import { Avatar } from '../components/ui/Avatar'
 import { Card } from '../components/ui/Card'
 import { Icons } from '../components/ui/icons'
 import { ShotChart } from '../components/ui/ShotChart'
+import { NumberPad } from '../components/ui/NumberPad'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { useAttendanceStats } from '../hooks/useAttendanceStats'
 import { usePlayer, useUpdatePlayer } from '../hooks/usePlayers'
@@ -19,16 +20,18 @@ import type { ChartMode, HeatEntry, Player } from '../types'
 // ── Edit Player sheet (PRD §4.1) ────────────────────────────────────────────
 // Opened from the pencil affordance on the hero card below. Same bottom-sheet
 // shell and required-field validation pattern as `PlayersPage.tsx`'s
-// `AddPlayerSheet`, plus three plain number inputs (0-100) for the shooting
-// targets, pre-filled from the player's current target_*_percent (x100) and
-// converted back to the stored 0-1 range on save via useUpdatePlayer() —
-// that hook already existed with zero call sites before this task.
+// `AddPlayerSheet`, plus three shooting-target fields (0-100), pre-filled
+// from the player's current target_*_percent (x100) and converted back to
+// the stored 0-1 range on save via useUpdatePlayer(). Per PRD §1.4's global
+// "tap any numeric value → numpad" rule, targets are entered via the shared
+// NumberPad rather than a native number input.
 function EditPlayerSheet({ player, onClose }: { player: Player; onClose: () => void }) {
   const [name, setName] = useState(player.name)
   const [nickname, setNickname] = useState(player.nickname)
-  const [ftPercent, setFtPercent] = useState(String(fractionToPercentInput(player.target_ft_percent)))
-  const [midPercent, setMidPercent] = useState(String(fractionToPercentInput(player.target_mid_percent)))
-  const [tptPercent, setTptPercent] = useState(String(fractionToPercentInput(player.target_3pt_percent)))
+  const [ftPercent, setFtPercent] = useState(fractionToPercentInput(player.target_ft_percent))
+  const [midPercent, setMidPercent] = useState(fractionToPercentInput(player.target_mid_percent))
+  const [tptPercent, setTptPercent] = useState(fractionToPercentInput(player.target_3pt_percent))
+  const [activeTargetField, setActiveTargetField] = useState<'ft' | 'mid' | 'tpt' | null>(null)
   const updatePlayer = useUpdatePlayer()
 
   const canSave = isPlayerEditValid(name, nickname)
@@ -39,9 +42,9 @@ function EditPlayerSheet({ player, onClose }: { player: Player; onClose: () => v
       id: player.id,
       name: name.trim(),
       nickname: nickname.trim(),
-      target_ft_percent: percentInputToFraction(Number(ftPercent)),
-      target_mid_percent: percentInputToFraction(Number(midPercent)),
-      target_3pt_percent: percentInputToFraction(Number(tptPercent)),
+      target_ft_percent: percentInputToFraction(ftPercent),
+      target_mid_percent: percentInputToFraction(midPercent),
+      target_3pt_percent: percentInputToFraction(tptPercent),
     })
     onClose()
   }
@@ -52,13 +55,19 @@ function EditPlayerSheet({ player, onClose }: { player: Player; onClose: () => v
     fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' as const,
   })
 
-  const numberInputStyle = {
+  const targetButtonStyle = {
     width: '100%', background: 'var(--panel-2)', border: '1px solid var(--line-2)',
-    borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px', outline: 'none',
-    fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' as const,
+    borderRadius: 'var(--r-sm)', color: 'var(--chalk)', fontSize: 16, padding: '12px 14px',
+    fontFamily: 'Archivo, sans-serif', boxSizing: 'border-box' as const, textAlign: 'left' as const, cursor: 'pointer',
   }
 
   const labelStyle = { fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }
+
+  const targetFieldMeta: Record<'ft' | 'mid' | 'tpt', { label: string; value: number; setValue: (v: number) => void }> = {
+    ft:  { label: 'FT%',  value: ftPercent,  setValue: setFtPercent },
+    mid: { label: 'Mid%', value: midPercent, setValue: setMidPercent },
+    tpt: { label: '3PT%', value: tptPercent, setValue: setTptPercent },
+  }
 
   return (
     <div
@@ -79,18 +88,14 @@ function EditPlayerSheet({ player, onClose }: { player: Player; onClose: () => v
 
         <p style={labelStyle}>Shooting Targets (%)</p>
         <div className="flex gap-2.5" style={{ marginBottom: 24 }}>
-          <label style={{ flex: 1 }}>
-            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>FT%</p>
-            <input type="number" min={0} max={100} value={ftPercent} onChange={(e) => setFtPercent(e.target.value)} style={numberInputStyle} />
-          </label>
-          <label style={{ flex: 1 }}>
-            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>Mid%</p>
-            <input type="number" min={0} max={100} value={midPercent} onChange={(e) => setMidPercent(e.target.value)} style={numberInputStyle} />
-          </label>
-          <label style={{ flex: 1 }}>
-            <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>3PT%</p>
-            <input type="number" min={0} max={100} value={tptPercent} onChange={(e) => setTptPercent(e.target.value)} style={numberInputStyle} />
-          </label>
+          {(['ft', 'mid', 'tpt'] as const).map(field => (
+            <div key={field} style={{ flex: 1 }}>
+              <p style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 6 }}>{targetFieldMeta[field].label}</p>
+              <button type="button" onClick={() => setActiveTargetField(field)} style={targetButtonStyle}>
+                {targetFieldMeta[field].value}
+              </button>
+            </div>
+          ))}
         </div>
 
         <button
@@ -107,6 +112,17 @@ function EditPlayerSheet({ player, onClose }: { player: Player; onClose: () => v
           {updatePlayer.isPending ? 'Saving…' : 'Save Changes'}
         </button>
       </div>
+
+      <NumberPad
+        isOpen={activeTargetField !== null}
+        value={activeTargetField ? targetFieldMeta[activeTargetField].value : 0}
+        label={activeTargetField ? `${targetFieldMeta[activeTargetField].label} target` : ''}
+        onConfirm={(v) => {
+          if (!activeTargetField) return
+          targetFieldMeta[activeTargetField].setValue(Math.min(100, Math.max(0, v)))
+        }}
+        onClose={() => setActiveTargetField(null)}
+      />
     </div>
   )
 }
