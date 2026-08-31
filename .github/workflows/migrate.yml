@@ -19,6 +19,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
+          # Pin to a known-good release; `latest` currently fails at `supabase link`.
           version: v2.105.0
 
       - name: Link project
