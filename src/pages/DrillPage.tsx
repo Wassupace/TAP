@@ -20,12 +20,15 @@ export default function DrillPage() {
     hand, setHand,
     selectedSpots, toggleSpot,
     heatSize, setHeatSize,
+    manualMode, setManualMode,
     makesTargetPerSpot, setMakesTarget,
     players, setPlayers,
     currentSpotIndex, currentPlayerIndex, setCurrentPlayerIndex,
     currentMakes, setMakes,
+    currentAttempts, setAttempts,
     completedHeats,
     commitHeat,
+    advanceSpot,
     undoLastHeat,
     reset,
     setDrillId,
@@ -38,6 +41,13 @@ export default function DrillPage() {
   const [toastVisible, setToastVisible] = useState(false)
   const [playerPickerOpen, setPlayerPickerOpen] = useState(false)
   const [numberPadOpen, setNumberPadOpen] = useState(false)
+  const [attemptsNumberPadOpen, setAttemptsNumberPadOpen] = useState(false)
+  const [heatSizeNumberPadOpen, setHeatSizeNumberPadOpen] = useState(false)
+  const [targetNumberPadOpen, setTargetNumberPadOpen] = useState(false)
+  // Task 5 (PRD's PAUSE rule): mid-drill roster edit reuses the same
+  // PlayerPickerModal as setup Step 4 — opening it doesn't touch
+  // completedHeats/currentMakes, so no explicit "pause" state is needed.
+  const [rosterEditOpen, setRosterEditOpen] = useState(false)
 
   const activeSpot = selectedSpots[currentSpotIndex] as ShotSpot | undefined
   const activePlayer = players[currentPlayerIndex]
@@ -55,7 +65,7 @@ export default function DrillPage() {
           shot_type: shotType,
           hand,
           selected_spots: selectedSpots,
-          heat_size: heatSize,
+          heat_size: manualMode ? null : heatSize,
           makes_target_per_spot: makesTargetPerSpot,
           player_ids: players.map(p => p.id),
           started_at: new Date().toISOString(),
@@ -73,6 +83,25 @@ export default function DrillPage() {
 
   const saveHeat = () => {
     const { drillComplete } = commitHeat()
+    if (drillComplete) {
+      nav('/drill/recap')
+      return
+    }
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 1200)
+  }
+
+  // Task 4 (PRD §7.2): "Next Spot" is available once >=1 heat has been
+  // logged on the current spot by ANYONE (not just the active shooter) —
+  // heatsForCurrentSpot below stays scoped to the active player for the
+  // heat-history strip. In Manual mode, a not-yet-saved tally also counts
+  // (advanceSpot() auto-saves it).
+  const heatsAtCurrentSpotAnyPlayer = completedHeats.filter(h => h.spot === activeSpot)
+  const canAdvanceSpot = heatsAtCurrentSpotAnyPlayer.length > 0
+    || (manualMode && (currentMakes > 0 || currentAttempts > 0))
+
+  const handleNextSpot = () => {
+    const { drillComplete } = advanceSpot()
     if (drillComplete) {
       nav('/drill/recap')
       return
@@ -201,24 +230,24 @@ export default function DrillPage() {
             </div>
           )}
 
-          {/* Step 3 — Heat size */}
+          {/* Step 3 — Heat size (PRD §7.1b: 5 / 10 / Player Input / Manual) */}
           {setupStep === 3 && (
             <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Heat size (shots per heat)
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[5, 8, 10, 12, 15, 20].map(n => (
+                {[5, 10].map(n => (
                   <button
                     key={n}
                     type="button"
-                    onClick={() => { setHeatSize(n); setSetupStep(4) }}
+                    onClick={() => { setHeatSize(n); setManualMode(false); setSetupStep(4) }}
                     style={{
-                      flex: '1 1 calc(33% - 8px)', minHeight: 64,
+                      flex: '1 1 calc(50% - 8px)', minHeight: 64,
                       borderRadius: 'var(--r-md)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: heatSize === n ? 'rgba(255,90,31,0.1)' : 'var(--panel)',
-                      border: heatSize === n ? '2px solid var(--orange)' : '1px solid var(--line)',
+                      background: !manualMode && heatSize === n ? 'rgba(255,90,31,0.1)' : 'var(--panel)',
+                      border: !manualMode && heatSize === n ? '2px solid var(--orange)' : '1px solid var(--line)',
                       cursor: 'pointer',
                       fontSize: 20, fontWeight: 800, color: 'var(--chalk)',
                       fontFamily: '"Archivo Expanded", Archivo, sans-serif',
@@ -227,6 +256,38 @@ export default function DrillPage() {
                     {n}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setHeatSizeNumberPadOpen(true)}
+                  style={{
+                    flex: '1 1 calc(50% - 8px)', minHeight: 64,
+                    borderRadius: 'var(--r-md)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: !manualMode && ![5, 10].includes(heatSize) ? 'rgba(255,90,31,0.1)' : 'var(--panel)',
+                    border: !manualMode && ![5, 10].includes(heatSize) ? '2px solid var(--orange)' : '1px solid var(--line)',
+                    cursor: 'pointer',
+                    fontSize: 14, fontWeight: 800, color: 'var(--chalk)',
+                    fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                  }}
+                >
+                  {!manualMode && ![5, 10].includes(heatSize) ? heatSize : 'Player Input'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setManualMode(true); setSetupStep(4) }}
+                  style={{
+                    flex: '1 1 calc(50% - 8px)', minHeight: 64,
+                    borderRadius: 'var(--r-md)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: manualMode ? 'rgba(255,90,31,0.1)' : 'var(--panel)',
+                    border: manualMode ? '2px solid var(--orange)' : '1px solid var(--line)',
+                    cursor: 'pointer',
+                    fontSize: 14, fontWeight: 800, color: 'var(--chalk)',
+                    fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                  }}
+                >
+                  Manual
+                </button>
               </div>
             </div>
           )}
@@ -276,21 +337,27 @@ export default function DrillPage() {
               <Button
                 variant="primary"
                 className="w-full !min-h-[54px]"
-                onClick={() => { if (players.length > 0) setSetupStep(5) }}
+                onClick={() => {
+                  if (players.length === 0) return
+                  // Task 2 (PRD §7.3): group drills skip the optional target step
+                  // entirely (fixed attempt quota only) — solo keeps it.
+                  if (players.length > 1) handleStart()
+                  else setSetupStep(5)
+                }}
               >
-                Next →
+                {players.length > 1 ? 'Start Drill' : 'Next →'}
               </Button>
             </div>
           )}
 
-          {/* Step 5 — Makes target */}
+          {/* Step 5 — Makes target (solo only, PRD §7.3): 10 / 50 / 100 / Player Input / None */}
           {setupStep === 5 && (
             <div className="stagger" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 16 }}>
               <p style={{ fontSize: 11, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>
                 Makes target per spot
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                {[5, 8, 10, 15, 20].map(n => (
+                {[10, 50, 100].map(n => (
                   <button
                     key={n}
                     type="button"
@@ -309,6 +376,22 @@ export default function DrillPage() {
                     {n}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setTargetNumberPadOpen(true)}
+                  style={{
+                    flex: '1 1 calc(33% - 8px)', minHeight: 64,
+                    borderRadius: 'var(--r-md)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: makesTargetPerSpot !== undefined && ![10, 50, 100].includes(makesTargetPerSpot) ? 'rgba(255,90,31,0.1)' : 'var(--panel)',
+                    border: makesTargetPerSpot !== undefined && ![10, 50, 100].includes(makesTargetPerSpot) ? '2px solid var(--orange)' : '1px solid var(--line)',
+                    cursor: 'pointer',
+                    fontSize: 13, fontWeight: 800, color: 'var(--chalk)',
+                    fontFamily: '"Archivo Expanded", Archivo, sans-serif',
+                  }}
+                >
+                  {makesTargetPerSpot !== undefined && ![10, 50, 100].includes(makesTargetPerSpot) ? makesTargetPerSpot : 'Player Input'}
+                </button>
                 <button
                   type="button"
                   onClick={() => setMakesTarget(undefined)}
@@ -345,6 +428,21 @@ export default function DrillPage() {
             })
           }}
           onClose={() => setPlayerPickerOpen(false)}
+        />
+
+        <NumberPad
+          isOpen={heatSizeNumberPadOpen}
+          value={heatSize}
+          label="Heat size"
+          onConfirm={(v) => { if (v > 0) { setHeatSize(v); setManualMode(false); setSetupStep(4) } }}
+          onClose={() => setHeatSizeNumberPadOpen(false)}
+        />
+        <NumberPad
+          isOpen={targetNumberPadOpen}
+          value={makesTargetPerSpot ?? 0}
+          label="Makes target per spot"
+          onConfirm={(v) => setMakesTarget(v > 0 ? v : undefined)}
+          onClose={() => setTargetNumberPadOpen(false)}
         />
       </div>
     )
@@ -413,7 +511,7 @@ export default function DrillPage() {
               >
                 {currentMakes}
               </button>
-              <span className="font-display text-[30px] text-[var(--faint)]">/{heatSize}</span>
+              {!manualMode && <span className="font-display text-[30px] text-[var(--faint)]">/{heatSize}</span>}
             </div>
             <button
               onClick={() => changeMakes(1)}
@@ -421,6 +519,34 @@ export default function DrillPage() {
               style={{ background: 'var(--orange)' }}
             >+</button>
           </div>
+
+          {/* Manual mode (PRD §7.1b/§7.3): no fixed heat size — attempts are
+              tallied alongside makes instead of a fixed denominator. */}
+          {manualMode && (
+            <>
+              <div className="text-[11px] tracking-[.1em] uppercase text-[var(--faint)] font-bold mt-5 mb-3">ATTEMPTS THIS HEAT</div>
+              <div className="flex items-center justify-center gap-6">
+                <button
+                  onClick={() => setAttempts(currentAttempts - 1)}
+                  className="w-[48px] h-[48px] rounded-full text-chalk text-[24px] font-bold cursor-pointer border"
+                  style={{ background: 'var(--panel-3)', borderColor: 'var(--line-2)' }}
+                >−</button>
+                <button
+                  type="button"
+                  onClick={() => setAttemptsNumberPadOpen(true)}
+                  className="font-display text-[40px] leading-[.9] bg-transparent border-0 p-0 cursor-pointer"
+                  style={{ color: 'inherit' }}
+                >
+                  {currentAttempts}
+                </button>
+                <button
+                  onClick={() => setAttempts(currentAttempts + 1)}
+                  className="w-[48px] h-[48px] rounded-full text-[#0c0c0c] text-[24px] font-bold cursor-pointer border-0"
+                  style={{ background: 'var(--orange)' }}
+                >+</button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Roster strip — manual shooter override */}
@@ -511,12 +637,22 @@ export default function DrillPage() {
       )}
 
       {/* Floating bar */}
-      <div className="absolute bottom-[18px] left-[14px] right-[14px] flex gap-2.5">
-        <Button variant="primary" className="flex-1 !min-h-[54px] !text-[14px]" onClick={saveHeat}>
-          Save Heat & Next
-        </Button>
-        <Button variant="ghost" className="!flex-none !min-h-[54px] !text-[14px] !w-[110px]" onClick={() => nav('/drill/recap')}>
-          End Drill
+      <div className="absolute bottom-[18px] left-[14px] right-[14px] flex flex-col gap-2.5">
+        <div className="flex gap-2.5">
+          <Button variant="ghost" className="!flex-none !w-[54px] !min-h-[54px]" onClick={() => setRosterEditOpen(true)}>
+            <span className="w-5 h-5">{Icons.roster}</span>
+          </Button>
+          <Button variant="primary" className="flex-1 !min-h-[54px] !text-[14px]" onClick={saveHeat}>
+            Save Heat & Next
+          </Button>
+          <Button variant="ghost" className="!flex-none !min-h-[54px] !text-[14px] !w-[110px]" onClick={() => nav('/drill/recap')}>
+            End Drill
+          </Button>
+        </div>
+        {/* Next Spot (Task 4, PRD §7.2): always available once >=1 heat has
+            been logged on the current spot, regardless of any makes target. */}
+        <Button variant="ghost" className="!min-h-[46px] !text-[13px]" onClick={handleNextSpot} disabled={!canAdvanceSpot}>
+          Next Spot →
         </Button>
       </div>
 
@@ -526,6 +662,27 @@ export default function DrillPage() {
         label="Makes this heat"
         onConfirm={setMakes}
         onClose={() => setNumberPadOpen(false)}
+      />
+      <NumberPad
+        isOpen={attemptsNumberPadOpen}
+        value={currentAttempts}
+        label="Attempts this heat"
+        onConfirm={setAttempts}
+        onClose={() => setAttemptsNumberPadOpen(false)}
+      />
+
+      {/* Pause mid-heat (Task 5, PRD PAUSE rule): the shared player picker,
+          opened without touching completedHeats/currentMakes. */}
+      <PlayerPickerModal
+        isOpen={rosterEditOpen}
+        selectedIds={players.map(p => p.id)}
+        onConfirm={(ids) => {
+          resolveIds(ids).then((resolved) => {
+            setPlayers(resolved)
+            setCurrentPlayerIndex(0)
+          })
+        }}
+        onClose={() => setRosterEditOpen(false)}
       />
     </div>
   )

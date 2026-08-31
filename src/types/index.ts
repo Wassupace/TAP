@@ -104,7 +104,7 @@ export interface Drill {
   shot_type: ShotType
   hand: Hand
   selected_spots: ShotSpot[]
-  heat_size: number
+  heat_size?: number
   makes_target_per_spot?: number
   player_ids: string[]
   started_at: string

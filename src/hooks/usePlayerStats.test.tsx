@@ -12,6 +12,7 @@ import {
   usePlayerWL,
   usePlayerWLByFormat,
   usePlayerRecreationalRecord,
+  usePlayerShooting,
   groupWLByFormat,
   tallyRecreationalRecord,
   RECREATIONAL_GAME_TYPES,
@@ -316,5 +317,43 @@ describe('usePlayerWL (unchanged)', () => {
     const getHook = mountHook(() => usePlayerWL('p1'))
     await waitForSettled(getHook)
     expect(getHook().data).toEqual({ wins: 1, losses: 1 })
+  })
+})
+
+// `heat_entries`'s chain: .select(...).eq('player_id', id)
+function buildHeatEntriesChain(result: Result) {
+  const chain = { select: vi.fn(), eq: vi.fn() }
+  chain.select.mockReturnValue(chain)
+  chain.eq.mockResolvedValue(result)
+  return chain
+}
+
+describe('usePlayerShooting — Task 7 (PRD §7.4): layup/floater/postUp roll into Mid-Range', () => {
+  it('rolls layup, floater, and postUp entries into the same midMakes/midAttempts bucket as midRange', async () => {
+    const chain = buildHeatEntriesChain({
+      data: [
+        { makes: 8, attempts: 10, drill: { shot_type: 'midRange' } },
+        { makes: 4, attempts: 5, drill: { shot_type: 'layup' } },
+        { makes: 3, attempts: 6, drill: { shot_type: 'floater' } },
+        { makes: 2, attempts: 4, drill: { shot_type: 'postUp' } },
+        { makes: 7, attempts: 10, drill: { shot_type: 'freeThrow' } },
+        { makes: 1, attempts: 3, drill: { shot_type: 'threePoint' } },
+      ],
+      error: null,
+    })
+    ;(mockFrom as MockedFunction<typeof mockFrom>).mockImplementation((table: string) => {
+      if (table === 'heat_entries') return chain
+      throw new Error(`unexpected table: ${table}`)
+    })
+
+    const getHook = mountHook(() => usePlayerShooting('p1'))
+    await waitForSettled(getHook)
+
+    expect(getHook().data).toEqual({
+      ftMakes: 7, ftAttempts: 10,
+      // 8+4+3+2 makes, 10+5+6+4 attempts across midRange/layup/floater/postUp
+      midMakes: 17, midAttempts: 25,
+      tptMakes: 1, tptAttempts: 3,
+    })
   })
 })

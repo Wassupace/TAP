@@ -218,3 +218,114 @@ describe('drillStore — solo drill (no players selected)', () => {
     expect(typeof drillComplete).toBe('boolean')
   })
 })
+
+describe('drillStore — group-drill spot completion is per-player, wait-for-everyone (2026-08-26 decision)', () => {
+  // Decision: a group drill's spot only advances once EVERY player has
+  // individually reached the makes target — a player who gets there early
+  // is skipped in the rotation (not given further turns) until the rest
+  // catch up. This directly replaces the old per-shooter-only check, which
+  // would advance the whole group as soon as whichever player was
+  // currently shooting hit their own target, regardless of anyone else.
+  const PLAYER_C: Player = {
+    id: 'player-c-uuid',
+    name: 'Carlos Cruz',
+    nickname: 'CC',
+    target_ft_percent: 0.75,
+    target_mid_percent: 0.5,
+    target_3pt_percent: 0.4,
+    created_at: '2026-01-01T00:00:00Z',
+  }
+
+  it('skips a player who already hit the target and only completes the spot once everyone has', () => {
+    buildChain()
+    useDrillStore.getState().setPlayers([PLAYER_A, PLAYER_B, PLAYER_C])
+    // setPlayers() clears makesTargetPerSpot for 2+ players (group invariant)
+    // — set it back explicitly to exercise this scenario directly.
+    useDrillStore.getState().setMakesTarget(5)
+
+    // Turn 1 — Alice (index 0) hits the target immediately.
+    useDrillStore.getState().setMakes(5)
+    let result = useDrillStore.getState().commitHeat()
+    expect(result.spotComplete).toBe(false)
+    expect(useDrillStore.getState().currentPlayerIndex).toBe(1) // Bianca — plain round robin still holds here
+
+    // Turn 2 — Bianca, partial.
+    useDrillStore.getState().setMakes(2)
+    result = useDrillStore.getState().commitHeat()
+    expect(result.spotComplete).toBe(false)
+    expect(useDrillStore.getState().currentPlayerIndex).toBe(2) // Carlos — still matches plain round robin
+
+    // Turn 3 — Carlos, partial. Plain round robin would go back to Alice
+    // (index 0) next, but Alice already hit the target — she must be
+    // skipped in favor of Bianca (index 1), who hasn't.
+    useDrillStore.getState().setMakes(1)
+    result = useDrillStore.getState().commitHeat()
+    expect(result.spotComplete).toBe(false)
+    expect(useDrillStore.getState().currentPlayerIndex).toBe(1) // Bianca, not Alice
+
+    // Turn 4 — Bianca gets the extra turn Alice would otherwise have taken,
+    // and now reaches the target too (2 + 3 = 5).
+    useDrillStore.getState().setMakes(3)
+    result = useDrillStore.getState().commitHeat()
+    expect(result.spotComplete).toBe(false)
+    expect(useDrillStore.getState().currentPlayerIndex).toBe(2) // Carlos — only one left short
+
+    // Turn 5 — Carlos finally reaches the target too (1 + 4 = 5). Every
+    // player has now individually hit it — the spot completes.
+    useDrillStore.getState().setMakes(4)
+    result = useDrillStore.getState().commitHeat()
+    expect(result.spotComplete).toBe(true)
+    expect(result.drillComplete).toBe(true) // only one spot ('center') was selected
+  })
+})
+
+describe('drillStore — advanceSpot (Task 4: dedicated Next Spot action)', () => {
+  it('advances to the next spot without requiring the makes target to be reached', () => {
+    buildChain()
+    useDrillStore.getState().toggleSpot('left0') // now 2 spots: center, left0
+    useDrillStore.getState().setPlayers([PLAYER_A])
+    useDrillStore.getState().setMakesTarget(50) // unreachable in one heat
+
+    useDrillStore.getState().setMakes(3)
+    useDrillStore.getState().commitHeat() // logs a heat, target nowhere near met
+    expect(useDrillStore.getState().currentSpotIndex).toBe(0)
+
+    const { drillComplete } = useDrillStore.getState().advanceSpot()
+    expect(drillComplete).toBe(false)
+    expect(useDrillStore.getState().currentSpotIndex).toBe(1)
+    expect(useDrillStore.getState().currentPlayerIndex).toBe(0)
+    // advanceSpot() itself must not log an extra heat in non-manual mode.
+    expect(useDrillStore.getState().completedHeats).toHaveLength(1)
+  })
+
+  it('in Manual mode, auto-saves the in-progress tally as one heat before advancing', () => {
+    buildChain()
+    useDrillStore.getState().toggleSpot('left0')
+    useDrillStore.getState().setPlayers([PLAYER_A])
+    useDrillStore.getState().setManualMode(true)
+
+    useDrillStore.getState().setMakes(6)
+    useDrillStore.getState().setAttempts(9)
+
+    const { drillComplete } = useDrillStore.getState().advanceSpot()
+    expect(drillComplete).toBe(false)
+    expect(useDrillStore.getState().currentSpotIndex).toBe(1)
+
+    const { completedHeats } = useDrillStore.getState()
+    expect(completedHeats).toHaveLength(1)
+    expect(completedHeats[0]).toMatchObject({ makes: 6, attempts: 9, playerId: PLAYER_A.id })
+    expect(useDrillStore.getState().currentMakes).toBe(0)
+    expect(useDrillStore.getState().currentAttempts).toBe(0)
+  })
+
+  it('in Manual mode, does not log a phantom heat when nothing was tallied', () => {
+    buildChain()
+    useDrillStore.getState().toggleSpot('left0')
+    useDrillStore.getState().setPlayers([PLAYER_A])
+    useDrillStore.getState().setManualMode(true)
+
+    useDrillStore.getState().advanceSpot()
+    expect(useDrillStore.getState().completedHeats).toHaveLength(0)
+    expect(useDrillStore.getState().currentSpotIndex).toBe(1)
+  })
+})

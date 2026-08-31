@@ -237,7 +237,9 @@ export function usePlayerShooting(playerId: string): {
       for (const row of rows) {
         const type = row.drill?.shot_type
         if (type === 'freeThrow') { stats.ftMakes += row.makes; stats.ftAttempts += row.attempts }
-        else if (type === 'midRange') { stats.midMakes += row.makes; stats.midAttempts += row.attempts }
+        // Layup/Floater/Post-Up roll into the same Mid-Range "Interior"
+        // bucket as midRange itself (PRD §7.4) — no separate career stat.
+        else if (type === 'midRange' || type === 'layup' || type === 'floater' || type === 'postUp') { stats.midMakes += row.makes; stats.midAttempts += row.attempts }
         else if (type === 'threePoint') { stats.tptMakes += row.makes; stats.tptAttempts += row.attempts }
       }
       return stats
