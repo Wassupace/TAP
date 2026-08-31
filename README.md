@@ -143,12 +143,12 @@ Sync worker:
 The Settings page includes OAuth connect/disconnect and one-tap export.
 
 Export behavior:
-- Creates a spreadsheet if none is linked
+- Selects a linked spreadsheet (paste an existing Sheet URL) or creates one if none is linked yet
 - Clears and rewrites tabs on each export
-- Writes these tabs:
+- Runs as a durable background job — queued in IndexedDB, survives navigating away or going offline, and fires automatically on reconnect
+- Writes these 6 tabs:
   - Sessions
-  - Matches (with derived win totals and avg margin per match)
-  - Games (individual game scores, winner, duration)
+  - Matches (each match's row immediately followed by its own game rows)
   - Competitive Games (with per-player result rows)
   - Drills
   - Players
@@ -171,14 +171,20 @@ Create tap-pwa/.env.local:
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
 
-# Optional (only for Google Sheets export)
+# Optional (only for Google Sheets export) — client ID only, safe to ship
 VITE_GOOGLE_CLIENT_ID=YOUR_GOOGLE_OAUTH_CLIENT_ID
-VITE_GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_OAUTH_CLIENT_SECRET
 ```
+
+The OAuth token exchange itself happens server-side, in the `api/google-oauth-callback.ts`
+Vercel Edge Function. Set `GOOGLE_CLIENT_SECRET` (no `VITE_` prefix) as a
+server-only environment variable in the Vercel project settings — never in
+`.env.local`, since anything prefixed `VITE_` ships in the client bundle.
+Running the export flow locally requires `vercel dev` instead of plain `vite`
+so the Edge Function is actually served.
 
 Notes:
 - The app disables Supabase auth session persistence and token auto-refresh in client config.
-- Without Google credentials, the Sheets page shows setup guidance and keeps export disabled.
+- Without a Google client ID, the Sheets page shows setup guidance and keeps export disabled.
 
 ## Local Development
 

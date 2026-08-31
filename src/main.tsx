@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
 import { initSyncWorker } from './lib/syncWorker'
+import { initExportWorker } from './lib/exportWorker'
 import { initThemeSync } from './lib/themeSync'
 
 const queryClient = new QueryClient({
@@ -14,6 +15,7 @@ const queryClient = new QueryClient({
 })
 
 initSyncWorker()
+initExportWorker()
 initThemeSync()
 
 createRoot(document.getElementById('root')!).render(
