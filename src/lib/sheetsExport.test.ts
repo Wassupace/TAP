@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { parseSheetIdFromUrl, buildMatchesRows, type ExportMatchRow, type ExportGameRow } from './sheetsExport'
+
+// sheetsExport.ts imports supabase.ts, which calls createClient() eagerly at
+// import time — mock it so this file doesn't need real VITE_SUPABASE_* env vars.
+vi.mock('./supabase', () => ({ supabase: { from: vi.fn() } }))
 
 describe('parseSheetIdFromUrl', () => {
   it('extracts the ID from a full edit URL', () => {
