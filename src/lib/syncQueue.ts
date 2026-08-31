@@ -9,8 +9,9 @@ export interface QueuedOperation {
   id: string
   table: string
   operation: 'insert' | 'update' | 'delete'
-  payload: Record<string, unknown>
+  payload: Record<string, unknown> | Record<string, unknown>[]
   rowId?: string       // for update/delete
+  onConflict?: string  // insert-only: upsert conflict target, defaults to 'id'
   createdAt: number
   retries: number
 }
@@ -55,7 +56,7 @@ export async function flush(): Promise<{ succeeded: number; failed: number }> {
   for (const op of ops) {
     try {
       if (op.operation === 'insert') {
-        const { error } = await supabase.from(op.table).upsert(op.payload, { onConflict: 'id' })
+        const { error } = await supabase.from(op.table).upsert(op.payload, { onConflict: op.onConflict ?? 'id' })
         if (error) throw error
       } else if (op.operation === 'update' && op.rowId) {
         const { error } = await supabase.from(op.table).update(op.payload).eq('id', op.rowId)

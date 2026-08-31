@@ -16,8 +16,8 @@ const { mockFrom } = vi.hoisted(() => ({ mockFrom: vi.fn() }))
 vi.mock('../lib/supabase', () => ({ supabase: { from: mockFrom } }))
 
 function buildChain(err: unknown = null) {
-  const chain = { insert: vi.fn() }
-  chain.insert.mockReturnValue(Promise.resolve({ error: err }))
+  const chain = { upsert: vi.fn() }
+  chain.upsert.mockReturnValue(Promise.resolve({ error: err }))
   ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
   return chain
 }
@@ -87,8 +87,9 @@ describe('drillStore — player assignment regression (heat_entries.player_id)',
     await vi.waitFor(() => {
       expect(mockFrom).toHaveBeenCalledWith('heat_entries')
     })
-    expect(chain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({ player_id: PLAYER_A.id })
+    expect(chain.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ player_id: PLAYER_A.id }),
+      { onConflict: 'id' }
     )
   })
 

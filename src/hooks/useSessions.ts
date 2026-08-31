@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { dbInsert, dbUpdate } from '../lib/db'
+import { cachedQuery } from '../lib/readCache'
 import type { Session, SessionAttendance } from '../types'
 import { buildRecurringSessionDates } from '../utils/recurringSessions'
 import { todayISODate } from '../utils/todayISODate'
@@ -7,7 +9,7 @@ import { todayISODate } from '../utils/todayISODate'
 export function useSessions(year: number, month: number) {
   return useQuery({
     queryKey: ['sessions', year, month],
-    queryFn: async () => {
+    queryFn: () => cachedQuery(`sessions:${year}-${month}`, async () => {
       const start = `${year}-${String(month).padStart(2, '0')}-01`
       const lastDay = new Date(year, month, 0).getDate()
       const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
@@ -19,7 +21,7 @@ export function useSessions(year: number, month: number) {
         .order('date')
       if (error) throw error
       return data as Session[]
-    },
+    }),
   })
 }
 
@@ -43,7 +45,7 @@ export function useTodaysPlannedSession() {
   const today = todayISODate()
   return useQuery({
     queryKey: ['todays-planned-session', today],
-    queryFn: async () => {
+    queryFn: () => cachedQuery(`todays-planned-session:${today}`, async () => {
       const { data, error } = await supabase
         .from('sessions')
         .select('*')
@@ -54,7 +56,7 @@ export function useTodaysPlannedSession() {
         .maybeSingle()
       if (error) throw error
       return data as Session | null
-    },
+    }),
   })
 }
 
@@ -62,7 +64,7 @@ export function useSession(id: string) {
   return useQuery({
     queryKey: ['session', id],
     enabled: !!id && id !== 'morning',
-    queryFn: async () => {
+    queryFn: () => cachedQuery(`session:${id}`, async () => {
       const { data, error } = await supabase
         .from('sessions')
         .select('*')
@@ -70,7 +72,7 @@ export function useSession(id: string) {
         .single()
       if (error) throw error
       return data as Session
-    },
+    }),
   })
 }
 
@@ -78,20 +80,26 @@ export function useSessionAttendances(sessionId: string) {
   return useQuery({
     queryKey: ['session-attendances', sessionId],
     enabled: !!sessionId && sessionId !== 'morning',
-    queryFn: async () => {
+    queryFn: () => cachedQuery(`session-attendances:${sessionId}`, async () => {
       const { data, error } = await supabase
         .from('session_attendances')
         .select('*')
         .eq('session_id', sessionId)
       if (error) throw error
       return data as SessionAttendance[]
-    },
+    }),
   })
 }
 
 export function useOpenSession() {
   const qc = useQueryClient()
   return useMutation({
+    // Task 5 (PRD §1.3): routed through dbInsert so an offline "Start New
+    // Session" is queued and actually lands once reconnected, instead of
+    // silently existing only in local Zustand state forever. The id is
+    // generated client-side so it's known synchronously (the caller sets
+    // it as the active session right away) and so a queued retry's
+    // upsert-by-id is idempotent.
     mutationFn: async ({
       location,
       date,
@@ -101,20 +109,17 @@ export function useOpenSession() {
       date: string
       expectedPlayerIds?: string[]
     }) => {
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert({
-          location,
-          date,
-          state: 'active',
-          started_at: new Date().toISOString(),
-          is_recurring: false,
-          expected_player_ids: expectedPlayerIds,
-        })
-        .select()
-        .single()
-      if (error) throw error
-      return data as Session
+      const session: Session = {
+        id: crypto.randomUUID(),
+        location,
+        date,
+        state: 'active',
+        started_at: new Date().toISOString(),
+        is_recurring: false,
+        expected_player_ids: expectedPlayerIds,
+      }
+      await dbInsert('sessions', session as unknown as Record<string, unknown>)
+      return session
     },
     onSuccess: (s) => {
       qc.invalidateQueries({ queryKey: ['sessions'] })
@@ -135,19 +140,16 @@ export function useCreatePlannedSession() {
       date: string
       expectedPlayerIds?: string[]
     }) => {
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert({
-          location,
-          date,
-          state: 'planned',
-          is_recurring: false,
-          expected_player_ids: expectedPlayerIds,
-        })
-        .select()
-        .single()
-      if (error) throw error
-      return data as Session
+      const session: Session = {
+        id: crypto.randomUUID(),
+        location,
+        date,
+        state: 'planned',
+        is_recurring: false,
+        expected_player_ids: expectedPlayerIds,
+      }
+      await dbInsert('sessions', session as unknown as Record<string, unknown>)
+      return session
     },
     onSuccess: (s) => {
       qc.invalidateQueries({ queryKey: ['sessions'] })
@@ -177,7 +179,8 @@ export function useCreateRecurringSessions() {
       date: string
       expectedPlayerIds?: string[]
     }) => {
-      const rows = buildRecurringSessionDates(date).map(({ date: rowDate, weekday }) => ({
+      const rows: Session[] = buildRecurringSessionDates(date).map(({ date: rowDate, weekday }) => ({
+        id: crypto.randomUUID(),
         location,
         date: rowDate,
         state: 'planned' as const,
@@ -185,12 +188,8 @@ export function useCreateRecurringSessions() {
         recurrence_weekday: weekday,
         expected_player_ids: expectedPlayerIds,
       }))
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert(rows)
-        .select()
-      if (error) throw error
-      return data as Session[]
+      await dbInsert('sessions', rows as unknown as Record<string, unknown>[])
+      return rows
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] })
@@ -207,8 +206,7 @@ export function useEndSession() {
         ended_at: new Date().toISOString(),
       }
       if (notes !== undefined) patch.notes = notes
-      const { error } = await supabase.from('sessions').update(patch).eq('id', id)
-      if (error) throw error
+      await dbUpdate('sessions', id, patch)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   })
@@ -224,14 +222,8 @@ export function useActivateSession() {
       sessionId: string
       presentPlayerIds: string[]
     }) => {
-      // Update session state
-      const { error: sessErr } = await supabase
-        .from('sessions')
-        .update({ state: 'active', started_at: new Date().toISOString() })
-        .eq('id', sessionId)
-      if (sessErr) throw sessErr
+      await dbUpdate('sessions', sessionId, { state: 'active', started_at: new Date().toISOString() })
 
-      // Upsert attendance records
       if (presentPlayerIds.length > 0) {
         const records = presentPlayerIds.map((playerId) => ({
           session_id: sessionId,
@@ -239,10 +231,7 @@ export function useActivateSession() {
           is_expected: true,
           arrived_at: new Date().toISOString(),
         }))
-        const { error: attErr } = await supabase
-          .from('session_attendances')
-          .upsert(records, { onConflict: 'session_id,player_id' })
-        if (attErr) throw attErr
+        await dbInsert('session_attendances', records, 'session_id,player_id')
       }
     },
     onSuccess: (_d, vars) => {

@@ -14,10 +14,11 @@ async function trySupabase(fn: () => PromiseLike<any>): Promise<boolean> {
 
 export async function dbInsert(
   table: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown> | Record<string, unknown>[],
+  onConflict = 'id'
 ): Promise<void> {
-  const opId = await enqueue({ table, operation: 'insert', payload })
-  const ok = await trySupabase(() => supabase.from(table).insert(payload))
+  const opId = await enqueue({ table, operation: 'insert', payload, onConflict })
+  const ok = await trySupabase(() => supabase.from(table).upsert(payload, { onConflict }))
   if (ok) await dequeue(opId)
 }
 

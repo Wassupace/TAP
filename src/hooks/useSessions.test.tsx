@@ -3,35 +3,35 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
+// ── In-memory IndexedDB queue store (same convention as src/lib/db.test.ts) —
+// useOpenSession et al. are routed through dbInsert/dbUpdate (Task 5, PRD
+// §1.3), which queues via idb before attempting Supabase. A real in-memory
+// store (not a static stub) is needed so getPendingCount() below actually
+// reflects queued/dequeued items.
+const idbStore = new Map<string, unknown>()
+
+vi.mock('idb', () => ({
+  openDB: async () => ({
+    put: async (_: string, val: { id: string }) => { idbStore.set(val.id, val) },
+    delete: async (_: string, id: string) => { idbStore.delete(id) },
+    count: async () => idbStore.size,
+    getAll: async () => [...idbStore.values()],
+    clear: async () => idbStore.clear(),
+  }),
+}))
+
 // ── Mock Supabase chain (same convention as src/lib/db.test.ts) ──────────────
 const { mockFrom } = vi.hoisted(() => ({ mockFrom: vi.fn() }))
 vi.mock('../lib/supabase', () => ({ supabase: { from: mockFrom } }))
 
 import { useCreatePlannedSession, useCreateRecurringSessions, useTodaysPlannedSession, useLocationHistory, dedupeLocationsByRecency } from './useSessions'
+import { getPendingCount } from '../lib/syncQueue'
 
-function buildInsertChain(result: { data?: unknown; error?: unknown }) {
-  const chain = {
-    insert: vi.fn(),
-    select: vi.fn(),
-    single: vi.fn(),
-  }
-  chain.insert.mockReturnValue(chain)
-  chain.select.mockReturnValue(chain)
-  chain.single.mockResolvedValue(result)
-  ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
-  return chain
-}
-
-// Task 6: the batch-insert path (`useCreateRecurringSessions`) never calls
-// `.single()` — it inserts an array and keeps the array back — so this
-// chain's `.select()` itself resolves, unlike `buildInsertChain` above.
-function buildBatchInsertChain(result: { data?: unknown; error?: unknown }) {
-  const chain = {
-    insert: vi.fn(),
-    select: vi.fn(),
-  }
-  chain.insert.mockReturnValue(chain)
-  chain.select.mockResolvedValue(result)
+// dbInsert() upserts (onConflict: 'id' by default) rather than plain
+// .insert() (Task 5) — see src/lib/db.ts.
+function buildUpsertChain(result: { error?: unknown }) {
+  const chain = { upsert: vi.fn() }
+  chain.upsert.mockResolvedValue(result)
   ;(mockFrom as MockedFunction<typeof mockFrom>).mockReturnValue(chain)
   return chain
 }
@@ -59,6 +59,7 @@ let queryClient: QueryClient
 
 beforeEach(() => {
   vi.clearAllMocks()
+  idbStore.clear()
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -93,15 +94,12 @@ function mountHook(): () => ReturnType<typeof useCreatePlannedSession> {
 }
 
 describe('useCreatePlannedSession', () => {
-  it('inserts state: planned with no started_at key, and forwards expectedPlayerIds', async () => {
-    const chain = buildInsertChain({
-      data: { id: 's1', location: 'Levallois Gym', date: '2026-09-01', state: 'planned' },
-      error: null,
-    })
+  it('upserts state: planned with a client-generated id and no started_at key, forwarding expectedPlayerIds', async () => {
+    const chain = buildUpsertChain({ error: null })
     const getHook = mountHook()
 
-    await act(async () => {
-      await getHook().mutateAsync({
+    const result = await act(async () => {
+      return getHook().mutateAsync({
         location: 'Levallois Gym',
         date: '2026-09-01',
         expectedPlayerIds: ['p1', 'p2'],
@@ -109,43 +107,47 @@ describe('useCreatePlannedSession', () => {
     })
 
     expect(mockFrom).toHaveBeenCalledWith('sessions')
-    expect(chain.insert).toHaveBeenCalledTimes(1)
-    const payload = chain.insert.mock.calls[0][0]
-    expect(payload).toEqual({
+    expect(chain.upsert).toHaveBeenCalledTimes(1)
+    const [payload, opts] = chain.upsert.mock.calls[0]
+    expect(opts).toEqual({ onConflict: 'id' })
+    expect(payload).toMatchObject({
       location: 'Levallois Gym',
       date: '2026-09-01',
       state: 'planned',
       is_recurring: false,
       expected_player_ids: ['p1', 'p2'],
     })
+    expect(typeof payload.id).toBe('string')
+    expect(payload.id.length).toBeGreaterThan(0)
     expect(payload).not.toHaveProperty('started_at')
+    // The mutation resolves with the same locally-built session (including
+    // the id used for the write) rather than a value read back from Supabase.
+    expect(result).toEqual(payload)
   })
 
   it('defaults expectedPlayerIds to an empty array when omitted', async () => {
-    const chain = buildInsertChain({
-      data: { id: 's2', location: 'Gym B', date: '2026-09-02', state: 'planned' },
-      error: null,
-    })
+    const chain = buildUpsertChain({ error: null })
     const getHook = mountHook()
 
     await act(async () => {
       await getHook().mutateAsync({ location: 'Gym B', date: '2026-09-02' })
     })
 
-    const payload = chain.insert.mock.calls[0][0]
+    const payload = chain.upsert.mock.calls[0][0]
     expect(payload.expected_player_ids).toEqual([])
     expect(payload).not.toHaveProperty('started_at')
   })
 
-  it('rejects when Supabase returns an error', async () => {
-    buildInsertChain({ data: null, error: new Error('offline') })
+  it('resolves (rather than rejecting) when Supabase is unreachable, leaving the write queued for retry', async () => {
+    buildUpsertChain({ error: new Error('offline') })
     const getHook = mountHook()
 
-    await expect(
-      act(async () => {
-        await getHook().mutateAsync({ location: 'Gym C', date: '2026-09-03' })
-      })
-    ).rejects.toThrow('offline')
+    const result = await act(async () => {
+      return getHook().mutateAsync({ location: 'Gym C', date: '2026-09-03' })
+    })
+
+    expect(result.location).toBe('Gym C')
+    expect(await getPendingCount()).toBe(1)
   })
 })
 
@@ -168,8 +170,8 @@ function mountRecurringHook(): () => ReturnType<typeof useCreateRecurringSession
 }
 
 describe('useCreateRecurringSessions', () => {
-  it('inserts a single batched array of 8 rows, is_recurring with the selected date\'s weekday', async () => {
-    const chain = buildBatchInsertChain({ data: [{ id: 'r1' }], error: null })
+  it('upserts a single batched array of 8 rows, each with its own client-generated id and is_recurring/weekday', async () => {
+    const chain = buildUpsertChain({ error: null })
     const getHook = mountRecurringHook()
 
     await act(async () => {
@@ -182,11 +184,10 @@ describe('useCreateRecurringSessions', () => {
     })
 
     expect(mockFrom).toHaveBeenCalledWith('sessions')
-    // Single batched call — not one insert per session.
-    expect(chain.insert).toHaveBeenCalledTimes(1)
-    expect(chain.select).toHaveBeenCalledTimes(1)
-
-    const rows = chain.insert.mock.calls[0][0]
+    // Single batched call — not one write per session.
+    expect(chain.upsert).toHaveBeenCalledTimes(1)
+    const [rows, opts] = chain.upsert.mock.calls[0]
+    expect(opts).toEqual({ onConflict: 'id' })
     expect(Array.isArray(rows)).toBe(true)
     expect(rows).toHaveLength(8)
     expect(rows.map((r: { date: string }) => r.date)).toEqual([
@@ -199,8 +200,9 @@ describe('useCreateRecurringSessions', () => {
       '2026-10-13',
       '2026-10-20',
     ])
+    const ids = new Set<string>()
     for (const row of rows) {
-      expect(row).toEqual({
+      expect(row).toMatchObject({
         location: 'Levallois Gym',
         date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
         state: 'planned',
@@ -208,33 +210,37 @@ describe('useCreateRecurringSessions', () => {
         recurrence_weekday: 2,
         expected_player_ids: ['p1'],
       })
+      expect(typeof row.id).toBe('string')
+      ids.add(row.id)
     }
+    expect(ids.size).toBe(8) // every row gets its own distinct id
   })
 
   it('defaults expectedPlayerIds to an empty array on every row when omitted', async () => {
-    const chain = buildBatchInsertChain({ data: [], error: null })
+    const chain = buildUpsertChain({ error: null })
     const getHook = mountRecurringHook()
 
     await act(async () => {
       await getHook().mutateAsync({ location: 'Gym B', date: '2026-09-02' })
     })
 
-    const rows = chain.insert.mock.calls[0][0]
+    const rows = chain.upsert.mock.calls[0][0]
     expect(rows).toHaveLength(8)
     for (const row of rows) {
       expect(row.expected_player_ids).toEqual([])
     }
   })
 
-  it('rejects when Supabase returns an error', async () => {
-    buildBatchInsertChain({ data: null, error: new Error('offline') })
+  it('resolves (rather than rejecting) when Supabase is unreachable, leaving the batch queued for retry', async () => {
+    buildUpsertChain({ error: new Error('offline') })
     const getHook = mountRecurringHook()
 
-    await expect(
-      act(async () => {
-        await getHook().mutateAsync({ location: 'Gym C', date: '2026-09-03' })
-      })
-    ).rejects.toThrow('offline')
+    const result = await act(async () => {
+      return getHook().mutateAsync({ location: 'Gym C', date: '2026-09-03' })
+    })
+
+    expect(result).toHaveLength(8)
+    expect(await getPendingCount()).toBe(1) // one batched queue entry, not 8
   })
 })
 

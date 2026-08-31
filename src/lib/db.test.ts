@@ -22,13 +22,13 @@ import { getPendingCount } from './syncQueue'
 
 function buildChain(err: unknown = null) {
   const chain = {
-    insert: vi.fn(),
+    upsert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
     eq:     vi.fn(),
   }
   const result = Promise.resolve({ error: err })
-  chain.insert.mockReturnValue(result)
+  chain.upsert.mockReturnValue(result)
   chain.update.mockReturnValue(chain)
   chain.delete.mockReturnValue(chain)
   chain.eq.mockReturnValue(result)
@@ -52,6 +52,19 @@ describe('dbInsert', () => {
     buildChain(new Error('network'))
     await dbInsert('players', { id: 'p1', name: 'JC' })
     expect(await getPendingCount()).toBe(1)
+  })
+
+  it('upserts on "id" by default, so a retry with the same client-generated id is idempotent', async () => {
+    const chain = buildChain(null)
+    await dbInsert('players', { id: 'p1', name: 'JC' })
+    expect(chain.upsert).toHaveBeenCalledWith({ id: 'p1', name: 'JC' }, { onConflict: 'id' })
+  })
+
+  it('accepts a custom onConflict target for composite-key upserts (e.g. session_attendances)', async () => {
+    const chain = buildChain(null)
+    const rows = [{ session_id: 's1', player_id: 'p1' }, { session_id: 's1', player_id: 'p2' }]
+    await dbInsert('session_attendances', rows, 'session_id,player_id')
+    expect(chain.upsert).toHaveBeenCalledWith(rows, { onConflict: 'session_id,player_id' })
   })
 })
 

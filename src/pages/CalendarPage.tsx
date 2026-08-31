@@ -106,14 +106,12 @@ export default function CalendarPage() {
 
   async function createAdHocSession(location: string) {
     const date = selectedDate
-    try {
-      const session = await openSession.mutateAsync({ location, date })
-      setActiveSession(session.id, session.location, [])
-      nav('/')
-    } catch {
-      setActiveSession(crypto.randomUUID(), location, [])
-      nav('/')
-    }
+    // useOpenSession is routed through dbInsert (Task 5, PRD §1.3) — it
+    // always resolves with a real, durably-queued session id, online or
+    // off, so no separate offline fallback is needed here anymore.
+    const session = await openSession.mutateAsync({ location, date })
+    setActiveSession(session.id, session.location, [])
+    nav('/')
   }
 
   function stateColor(s: Session) {
@@ -393,18 +391,15 @@ function PlanSessionSheet({ date, onClose }: PlanSessionSheetProps) {
 
   async function handlePlanSession() {
     if (!location.trim()) return
-    try {
-      if (repeatWeekly) {
-        await createRecurringSessions.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
-      } else {
-        await createPlannedSession.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
-      }
-      onClose()
-    } catch {
-      // Leave the sheet open on failure so the coach can retry — unlike the
-      // quick-start path, there's no "keep going anyway" fallback here since
-      // we aren't navigating away.
+    // useCreatePlannedSession/useCreateRecurringSessions are routed through
+    // dbInsert (Task 5, PRD §1.3) — they always resolve (queued offline
+    // rather than rejecting), so there's no failure path left to retry here.
+    if (repeatWeekly) {
+      await createRecurringSessions.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
+    } else {
+      await createPlannedSession.mutateAsync({ location: location.trim(), date, expectedPlayerIds })
     }
+    onClose()
   }
 
   return (

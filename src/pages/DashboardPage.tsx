@@ -413,13 +413,11 @@ export default function DashboardPage() {
 
   async function createAdHocSession(location: string, players: string[]) {
     const today = todayISODate()
-    try {
-      const session = await openSession.mutateAsync({ location, date: today })
-      setActiveSession(session.id, location, players)
-    } catch {
-      // Offline fallback: use a local UUID so session still works
-      setActiveSession(crypto.randomUUID(), location, players)
-    }
+    // useOpenSession is routed through dbInsert (Task 5, PRD §1.3) — it
+    // always resolves with a real, durably-queued session id, online or
+    // off, so no separate offline fallback is needed here anymore.
+    const session = await openSession.mutateAsync({ location, date: today })
+    setActiveSession(session.id, location, players)
   }
 
   async function handleConfirm(location: string, players: string[]) {

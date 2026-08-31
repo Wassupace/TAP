@@ -43,12 +43,11 @@ export default function AttendancePage() {
     const presentPlayers = allPlayers.filter((p) => checked.has(p.id))
     const location = session?.location ?? 'Court'
 
-    try {
-      await activateSession.mutateAsync({ sessionId, presentPlayerIds: presentIds })
-      setActiveSession(sessionId, location, presentPlayers.map((p) => p.nickname))
-    } catch {
-      setActiveSession(sessionId, location, presentPlayers.map((p) => p.nickname))
-    }
+    // useActivateSession is routed through dbUpdate/dbInsert (Task 5, PRD
+    // §1.3) — it always resolves (queued offline rather than rejecting),
+    // so there's no separate failure branch left here anymore.
+    await activateSession.mutateAsync({ sessionId, presentPlayerIds: presentIds })
+    setActiveSession(sessionId, location, presentPlayers.map((p) => p.nickname))
     nav('/')
   }
 
